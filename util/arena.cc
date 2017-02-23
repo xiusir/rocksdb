@@ -98,7 +98,11 @@ char* Arena::AllocateFallback(size_t bytes, bool aligned) {
     size = kBlockSize;
     block_head = AllocateNewBlock(size);
   }
+  //@NOTE 如果block_head==nullptr，如何处理？
+  //感觉是个未考虑到的异常，当无法申请更多内存时，这段代码会有问题？
   alloc_bytes_remaining_ = size - bytes;
+  //@NOTE alloc_bytes_remaining_原值对应的内存空间直接放弃？
+  //是的，Arena类只进行分配，不考虑内存空洞。
 
   if (aligned) {
     aligned_alloc_ptr_ = block_head + bytes;
@@ -130,6 +134,10 @@ char* Arena::AllocateFromHugePage(size_t bytes) {
   }
   // the following shouldn't throw because of the above reserve()
   huge_blocks_.emplace_back(MmapInfo(addr, bytes));
+  //@NOTE how about this?
+  //huge_blocks_.emplace_back(addr, bytes);
+  //使用emplace_back的目的就是为了避免push_back的拷贝构造。
+  //编译器会自动优化这一步吗？
   blocks_memory_ += bytes;
   return reinterpret_cast<char*>(addr);
 #else
@@ -164,6 +172,7 @@ char* Arena::AllocateAligned(size_t bytes, size_t huge_page_size,
   size_t current_mod =
       reinterpret_cast<uintptr_t>(aligned_alloc_ptr_) & (kAlignUnit - 1);
   size_t slop = (current_mod == 0 ? 0 : kAlignUnit - current_mod);
+  //@NOTE 计算对齐需要跳过的空间size
   size_t needed = bytes + slop;
   char* result;
   if (needed <= alloc_bytes_remaining_) {
@@ -173,6 +182,7 @@ char* Arena::AllocateAligned(size_t bytes, size_t huge_page_size,
   } else {
     // AllocateFallback always returns aligned memory
     result = AllocateFallback(bytes, true /* aligned */);
+    //@NOTE what happens if the returned value is a nullptr?
   }
   assert((reinterpret_cast<uintptr_t>(result) & (kAlignUnit - 1)) == 0);
   return result;

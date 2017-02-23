@@ -41,6 +41,12 @@ class Arena : public Allocator {
   explicit Arena(size_t block_size = kMinBlockSize, size_t huge_page_size = 0);
   ~Arena();
 
+  //@NOTE huge page linux内核支持大内存块，因为TLB Cache容量有限，使用大内存块
+  //可以让程序高效地访问更大内存范围，因为TLB缓存物理内存寻址记录，所以能提高寻址速度。
+  //但使用不当会造成性能下降
+  //http://cenalulu.github.io/linux/huge-page-on-numa/
+  //https://www.kernel.org/doc/Documentation/vm/hugetlbpage.txt
+
   char* Allocate(size_t bytes) override;
 
   // huge_page_size: if >0, will try to allocate from huage page TLB.
@@ -107,8 +113,11 @@ class Arena : public Allocator {
   size_t hugetlb_size_ = 0;
 #endif  // MAP_HUGETLB
   char* AllocateFromHugePage(size_t bytes);
+  //@NOTE 使用mmap向内核申请hugepage内存
   char* AllocateFallback(size_t bytes, bool aligned);
+  //@NOTE 剩余空间不能满足当前申请要求时，调用AllocateFallback
   char* AllocateNewBlock(size_t block_bytes);
+  //@NOTE 使用new char[]申请内存，即malloc
 
   // Bytes of memory in blocks allocated so far
   size_t blocks_memory_ = 0;
@@ -131,5 +140,6 @@ inline char* Arena::Allocate(size_t bytes) {
 //  1. in the range of [kMinBlockSize, kMaxBlockSize].
 //  2. the multiple of align unit.
 extern size_t OptimizeBlockSize(size_t block_size);
+//@NOTE 调整block_size使得满足min,max范围，且满足对齐要求
 
 }  // namespace rocksdb
