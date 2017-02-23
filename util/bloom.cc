@@ -22,6 +22,7 @@ class FullFilterBlockBuilder;
 
 namespace {
 class FullFilterBitsBuilder : public FilterBitsBuilder {
+  //@NOTE 根据外部提供的key一次性构建filter
  public:
   explicit FullFilterBitsBuilder(const size_t bits_per_key,
                                  const size_t num_probes)
@@ -38,6 +39,7 @@ class FullFilterBitsBuilder : public FilterBitsBuilder {
       hash_entries_.push_back(hash);
     }
   }
+  //@NOTE 将hash值添加到hash_entries_，然后调用一次Finish生成filter。
 
   // Create a filter that for hashes [0, n-1], the filter is allocated here
   // When creating filter, it is ensured that
@@ -54,6 +56,10 @@ class FullFilterBitsBuilder : public FilterBitsBuilder {
   // | ...                | num_probes : 1 byte | num_lines : 4 bytes |
   // +----------------------------------------------------------------+
   virtual Slice Finish(std::unique_ptr<const char[]>* buf) override {
+    //@NOTE cache line是CPU Cache的最小缓存单位，一般是64Byte，
+    //CPU每级Cache包含若干个cache line。
+    //这里num_lines表示number of cache lines.
+    // http://cenalulu.github.io/linux/all-about-cpu-cache/
     uint32_t total_bits, num_lines;
     char* data = ReserveSpace(static_cast<int>(hash_entries_.size()),
                               &total_bits, &num_lines);
@@ -66,6 +72,7 @@ class FullFilterBitsBuilder : public FilterBitsBuilder {
     }
     data[total_bits/8] = static_cast<char>(num_probes_);
     EncodeFixed32(data + total_bits/8 + 1, static_cast<uint32_t>(num_lines));
+    //@NOTE 将num_lines写入指定位置
 
     const char* const_data = data;
     buf->reset(const_data);
@@ -76,15 +83,20 @@ class FullFilterBitsBuilder : public FilterBitsBuilder {
 
  private:
   size_t bits_per_key_;
+  //@NOTE 每个key需要多少个bit
   size_t num_probes_;
+  //@NOTE hash探查次数，即每个key写入filter时标记多少个bit
   std::vector<uint32_t> hash_entries_;
+  //@NOTE 保存需要写入过滤器的key的hash值
 
   // Get totalbits that optimized for cpu cache line
   uint32_t GetTotalBitsForLocality(uint32_t total_bits);
+  //@NOTE 返回第一个大于total_bits的cache_line_size*8的整数倍
 
   // Reserve space for new filter
   char* ReserveSpace(const int num_entry, uint32_t* total_bits,
       uint32_t* num_lines);
+  //@NOTE 计算创建filter需要的内存，并使用new char[]申请内存
 
   // Assuming single threaded access to this function.
   void AddHash(uint32_t h, char* data, uint32_t num_lines,
@@ -104,6 +116,9 @@ uint32_t FullFilterBitsBuilder::GetTotalBitsForLocality(uint32_t total_bits) {
   if (num_lines % 2 == 0) {
     num_lines++;
   }
+  //@NOTE 为什么偶数时要多一个字节???
+  //h % num_lines能更均匀？
+
   return num_lines * (CACHE_LINE_SIZE * 8);
 }
 
@@ -138,12 +153,15 @@ inline void FullFilterBitsBuilder::AddHash(uint32_t h, char* data,
 
   const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
   uint32_t b = (h % num_lines) * (CACHE_LINE_SIZE * 8);
+  //@NOTE 选择block
 
   for (uint32_t i = 0; i < num_probes_; ++i) {
     // Since CACHE_LINE_SIZE is defined as 2^n, this line will be optimized
     // to a simple operation by compiler.
     const uint32_t bitpos = b + (h % (CACHE_LINE_SIZE * 8));
     data[bitpos / 8] |= (1 << (bitpos % 8));
+    //@NOTE 找到h对应的bit位，标记为1
+    //h的num_probes个bit位属于同一个cache line，有利于提高cpu缓存命中。
 
     h += delta;
   }
@@ -204,6 +222,7 @@ class FullFilterBitsReader : public FilterBitsReader {
   // is valid.
   bool HashMayMatch(const uint32_t& hash, const Slice& filter,
       const size_t& num_probes, const uint32_t& num_lines);
+  //@NOTE bloomfilter特性描述
 
   // No Copy allowed
   FullFilterBitsReader(const FullFilterBitsReader&);
@@ -254,6 +273,10 @@ bool FullFilterBitsReader::HashMayMatch(const uint32_t& hash,
   return true;
 }
 
+//@NOTE BloomFilterPolicy为什么要重新实现一个bloomfilter，同时还提供FullFilter?
+//感觉这段代码有点丑啊
+//FullFilter和BloomFilter输出的Slice编码格式不同，没必要攒在一起。
+
 // An implementation of filter policy
 class BloomFilterPolicy : public FilterPolicy {
  public:
@@ -261,6 +284,7 @@ class BloomFilterPolicy : public FilterPolicy {
       : bits_per_key_(bits_per_key), hash_func_(BloomHash),
         use_block_based_builder_(use_block_based_builder) {
     initialize();
+    //@NOTE 计算num_probes，约等于bits_per_key*0.69
   }
 
   ~BloomFilterPolicy() {
