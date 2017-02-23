@@ -3,6 +3,7 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 #pragma once
+//@NOTE #pragma once是非标准的前置符号，保证本文件在一个单独编译中只被include一次。
 
 #include <algorithm>
 #include <cassert>
@@ -41,6 +42,7 @@ class autovector : public std::vector<T> {
 // Naming style of public methods almost follows that of the STL's.
 template <class T, size_t kSize = 8>
 class autovector {
+  //@NOTE 其实相当于struct x{ int a[kSize]}，把栈空间上的数组包装成vector来用。
  public:
   // General STL-style container member types.
   typedef T value_type;
@@ -68,6 +70,9 @@ class autovector {
     iterator_impl(const iterator_impl&) = default;
     ~iterator_impl() {}
     iterator_impl& operator=(const iterator_impl&) = default;
+    //@NOTE default 是C++11新特性，表示将函数显式声明为默认空函数，效率比手写空函数要高
+    //https://en.wikipedia.org/wiki/C%2B%2B11#Explicitly_defaulted_and_deleted_special_member_functions
+    //http://blog.csdn.net/fengbingchun/article/details/52475155
 
     // -- Advancement
     // ++iterator
