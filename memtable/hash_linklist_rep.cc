@@ -183,6 +183,7 @@ class HashLinkListRep : public MemTableRep {
   virtual ~HashLinkListRep();
 
   virtual MemTableRep::Iterator* GetIterator(Arena* arena = nullptr) override;
+  //@NOTE nullptr - c++11新特性，空指针专用常量, 类型为nullptr_t
 
   virtual MemTableRep::Iterator* GetDynamicPrefixIterator(
        Arena* arena = nullptr) override;

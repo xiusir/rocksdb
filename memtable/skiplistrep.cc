@@ -10,6 +10,7 @@
 
 namespace rocksdb {
 namespace {
+//@NOTE anonymous namespace - 匿名命名空间
 class SkipListRep : public MemTableRep {
   InlineSkipList<const MemTableRep::KeyComparator&> skip_list_;
   const MemTableRep::KeyComparator& cmp_;

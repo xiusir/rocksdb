@@ -29,6 +29,9 @@ class HashSkipListRep : public MemTableRep {
                   int32_t skiplist_branching_factor);
 
   virtual void Insert(KeyHandle handle) override;
+  //@NOTE override - c++11新特性-
+  // Specifies that a virtual function overrides another virtual function.
+  // Compiler check this and report warning when the member functions not virtual.
 
   virtual bool Contains(const char* key) const override;
 
@@ -276,6 +279,7 @@ void HashSkipListRep::Insert(KeyHandle handle) {
 }
 
 bool HashSkipListRep::Contains(const char* key) const {
+  //@NOTE auto - c++11新特性-自动类型推导，即由编译器将auto替换为恰当的类型
   auto transformed = transform_->Transform(UserKey(key));
   auto bucket = GetBucket(transformed);
   if (bucket == nullptr) {
