@@ -42,6 +42,7 @@ class ConcurrentArena : public Allocator {
   // in fact just passed to the constructor of arena_.  The core-local
   // shards compute their shard_block_size as a fraction of block_size
   // that varies according to the hardware concurrency level.
+  //@NOTE shard数量取最小的一个不小于8且不小于cpu核数的2的幂。
   explicit ConcurrentArena(size_t block_size = Arena::kMinBlockSize,
                            size_t huge_page_size = 0);
 
@@ -53,6 +54,7 @@ class ConcurrentArena : public Allocator {
   char* AllocateAligned(size_t bytes, size_t huge_page_size = 0,
                         Logger* logger = nullptr) override {
     size_t rounded_up = ((bytes - 1) | (sizeof(void*) - 1)) + 1;
+    //@NOTE 按指针size对齐bytes
     assert(rounded_up >= bytes && rounded_up < bytes + sizeof(void*) &&
            (rounded_up % sizeof(void*)) == 0);
 
@@ -62,6 +64,7 @@ class ConcurrentArena : public Allocator {
   }
 
   size_t ApproximateMemoryUsage() const {
+    //@NOTE 近似内存使用量
     std::unique_lock<SpinMutex> lock(arena_mutex_, std::defer_lock);
     if (index_mask_ != 0) {
       lock.lock();
@@ -70,6 +73,7 @@ class ConcurrentArena : public Allocator {
   }
 
   size_t MemoryAllocatedBytes() const {
+    //@NOTE 已申请的内存量
     return memory_allocated_bytes_.load(std::memory_order_relaxed);
   }
 
@@ -99,6 +103,10 @@ class ConcurrentArena : public Allocator {
 #else
   enum ZeroFirstEnum : uint32_t { tls_cpuid = 0 };
 #endif
+//@NOTE tls Thread-local storage (TLS)
+// tls_cpuid 当前tls关联的cpuid
+// 用0和非0表示是否进行过repick
+// https://en.wikipedia.org/wiki/Thread-local_storage
 
   char padding0[56] ROCKSDB_FIELD_UNUSED;
 
@@ -128,6 +136,7 @@ class ConcurrentArena : public Allocator {
 
   template <typename Func>
   char* AllocateImpl(size_t bytes, bool force_arena, const Func& func) {
+    //@NOTE func 是arena申请内存的函数调用。
     uint32_t cpu;
 
     // Go directly to the arena if the allocation is too large, or if
@@ -139,6 +148,7 @@ class ConcurrentArena : public Allocator {
         ((cpu = tls_cpuid) == 0 &&
          !shards_[0].allocated_and_unused_.load(std::memory_order_relaxed) &&
          arena_lock.try_lock())) {
+      //@NOTE 申请内存较大 或 强制arena申请 或 核心shard无可用内存且不需要等锁
       if (!arena_lock.owns_lock()) {
         arena_lock.lock();
       }
@@ -153,6 +163,7 @@ class ConcurrentArena : public Allocator {
       s = Repick();
       s->mutex.lock();
     }
+    //@NOTE 优先从Shard[0]分配，若Shard[0]被锁则选取当前cpu核标号的Shard
     std::unique_lock<SpinMutex> lock(s->mutex, std::adopt_lock);
 
     size_t avail = s->allocated_and_unused_.load(std::memory_order_relaxed);
@@ -168,6 +179,12 @@ class ConcurrentArena : public Allocator {
                   ? exact
                   : shard_block_size_;
       s->free_begin_ = arena_.AllocateAligned(avail);
+      //@NOTE Shard内存不够用，从arena申请
+      //若arena可用内存大于shard_block_size的二分之一小于shard_block_size两倍，
+      //则将可用内存全部分给Shard。
+      //否则按shard_block_size分给Shard。
+      //
+      //s->free_begin_是否可能为nullptr?
       Fixup();
     }
     s->allocated_and_unused_.store(avail - bytes, std::memory_order_relaxed);
