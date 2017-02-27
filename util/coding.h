@@ -74,6 +74,9 @@ extern void EncodeFixed64(char* dst, uint64_t value);
 // Lower-level versions of Put... that write directly into a character buffer
 // and return a pointer just past the last byte written.
 // REQUIRES: dst has enough space for the value being written
+//@NOTE 根据value大小不同，最小需要1个字节，最大需要5个字节
+//适用场景：大多数v值小于2^21的场景。
+// big-endian
 extern char* EncodeVarint32(char* dst, uint32_t value);
 extern char* EncodeVarint64(char* dst, uint64_t value);
 
@@ -108,18 +111,22 @@ inline uint64_t DecodeFixed64(const char* ptr) {
 }
 
 // Internal routine for use by fallback path of GetVarint32Ptr
+//@NOTE 按EncodeVarint32编码方式从p读取value，返回下一段数据的头指针。
 extern const char* GetVarint32PtrFallback(const char* p,
                                           const char* limit,
                                           uint32_t* value);
 inline const char* GetVarint32Ptr(const char* p,
                                   const char* limit,
                                   uint32_t* value) {
+//@NOTE 从p读取一个uint32存入*value，返回下一段数据的头指针。
   if (p < limit) {
     uint32_t result = *(reinterpret_cast<const unsigned char*>(p));
     if ((result & 128) == 0) {
       *value = result;
       return p + 1;
     }
+    //@NOTE 当value小于2^7时减少1次函数调用。
+    //当大量value小于2^7时效果很好。
   }
   return GetVarint32PtrFallback(p, limit, value);
 }
@@ -134,6 +141,9 @@ inline void EncodeFixed32(char* buf, uint32_t value) {
   buf[2] = (value >> 16) & 0xff;
   buf[3] = (value >> 24) & 0xff;
 #endif
+//@NOTE 字节序
+//little-endian(小尾序) 高8位bit在低地址byte空间。
+//big-endian(大尾序) 低8位bit在低地址byte空间。
 }
 
 inline void EncodeFixed64(char* buf, uint64_t value) {
@@ -181,6 +191,7 @@ inline void PutVarint32(std::string* dst, uint32_t v) {
 }
 
 inline void PutVarint32Varint32(std::string* dst, uint32_t v1, uint32_t v2) {
+//@NOTE 一次把2个uint32以varint形式追加到dst。
   char buf[10];
   char* ptr = EncodeVarint32(buf, v1);
   ptr = EncodeVarint32(ptr, v2);
@@ -189,6 +200,7 @@ inline void PutVarint32Varint32(std::string* dst, uint32_t v1, uint32_t v2) {
 
 inline void PutVarint32Varint32Varint32(std::string* dst, uint32_t v1,
                                         uint32_t v2, uint32_t v3) {
+//@NOTE 一次搞3个...
   char buf[15];
   char* ptr = EncodeVarint32(buf, v1);
   ptr = EncodeVarint32(ptr, v2);
@@ -197,6 +209,10 @@ inline void PutVarint32Varint32Varint32(std::string* dst, uint32_t v1,
 }
 
 inline char* EncodeVarint64(char* dst, uint64_t v) {
+//@NOTE 与EncodeVarint32相同的方法，处理uint64。
+//而EncodeVarint32使用extern，EncodeVarint64使用inline，为什么？
+//if-else太多程序难看？
+//而uint64的使用次数比较少，没必要？
   static const unsigned int B = 128;
   unsigned char* ptr = reinterpret_cast<unsigned char*>(dst);
   while (v >= B) {
@@ -221,6 +237,7 @@ inline void PutVarint64Varint64(std::string* dst, uint64_t v1, uint64_t v2) {
 }
 
 inline void PutVarint32Varint64(std::string* dst, uint32_t v1, uint64_t v2) {
+//@NOTE 把uint32,uint64两个参数编码后追加到dst。
   char buf[15];
   char* ptr = EncodeVarint32(buf, v1);
   ptr = EncodeVarint64(ptr, v2);
@@ -237,12 +254,14 @@ inline void PutVarint32Varint32Varint64(std::string* dst, uint32_t v1,
 }
 
 inline void PutLengthPrefixedSlice(std::string* dst, const Slice& value) {
+//@NOTE 将数据块追加到dst，长度使用Varint编码。
   PutVarint32(dst, static_cast<uint32_t>(value.size()));
   dst->append(value.data(), value.size());
 }
 
 inline void PutLengthPrefixedSliceParts(std::string* dst,
                                         const SliceParts& slice_parts) {
+//@NOTE 将多个SlicePart拼接成一个Slice后追加到dst
   size_t total_bytes = 0;
   for (int i = 0; i < slice_parts.num_parts; ++i) {
     total_bytes += slice_parts.parts[i].size();
@@ -254,6 +273,7 @@ inline void PutLengthPrefixedSliceParts(std::string* dst,
 }
 
 inline int VarintLength(uint64_t v) {
+//@NOTE Varint类型数据的字节长度
   int len = 1;
   while (v >= 128) {
     v >>= 7;
@@ -279,6 +299,7 @@ inline bool GetVarint32(Slice* input, uint32_t* value) {
     return false;
   } else {
     *input = Slice(q, static_cast<size_t>(limit - q));
+    //@NOTE Slice是个超轻量的struct
     return true;
   }
 }
@@ -297,6 +318,7 @@ inline bool GetVarint64(Slice* input, uint64_t* value) {
 
 // Provide an interface for platform independent endianness transformation
 inline uint64_t EndianTransform(uint64_t input, size_t size) {
+//@NOTE 字节序互相转换：小端序转为大端序、大端序转为小端序。
   char* pos = reinterpret_cast<char*>(&input);
   uint64_t ret_val = 0;
   for (size_t i = 0; i < size; ++i) {
@@ -307,6 +329,7 @@ inline uint64_t EndianTransform(uint64_t input, size_t size) {
 }
 
 inline bool GetLengthPrefixedSlice(Slice* input, Slice* result) {
+//@NOTE 从input读取数据存入result，并将input移动到下一段数据。
   uint32_t len = 0;
   if (GetVarint32(input, &len) && input->size() >= len) {
     *result = Slice(input->data(), len);
@@ -326,6 +349,7 @@ inline Slice GetLengthPrefixedSlice(const char* data) {
 }
 
 inline Slice GetSliceUntil(Slice* slice, char delimiter) {
+//@NOTE 读取并返回第一个分隔符之前的数据块。
   uint32_t len = 0;
   for (len = 0; len < slice->size() && slice->data()[len] != delimiter; ++len) {
     // nothing
