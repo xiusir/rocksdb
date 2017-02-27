@@ -69,6 +69,7 @@ void DynamicBloom::SetTotalBits(Allocator* allocator,
     sz += CACHE_LINE_SIZE - 1;
   }
   assert(allocator);
+  //@NOTE 冗余CACHE_LINE_SIZE-1个字节，目的是给后面的按CACHE_LINE_SIZE对齐留足空间。
 
   char* raw = allocator->AllocateAligned(sz, huge_page_tlb_size, logger);
   memset(raw, 0, sz);

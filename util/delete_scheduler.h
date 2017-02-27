@@ -31,6 +31,7 @@ class SstFileManagerImpl;
 // Rate limiting can be turned off by setting rate_bytes_per_sec = 0, In this
 // case DeleteScheduler will delete files immediately.
 class DeleteScheduler {
+//@NOTE 文件删除操作-调度器，保证文件删除速度不快于rate_bytes_per_sec。
  public:
   DeleteScheduler(Env* env, const std::string& trash_dir,
                   int64_t rate_bytes_per_sec, Logger* info_log,

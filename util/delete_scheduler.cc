@@ -35,6 +35,7 @@ DeleteScheduler::DeleteScheduler(Env* env, const std::string& trash_dir,
   } else {
     bg_thread_.reset(
         new std::thread(&DeleteScheduler::BackgroundEmptyTrash, this));
+    //@NOTE 启动线程
   }
 }
 
@@ -112,6 +113,7 @@ Status DeleteScheduler::MoveToTrash(const std::string& file_path,
   InstrumentedMutexLock l(&file_move_mu_);
   while (true) {
     s = env_->FileExists(*path_in_trash + unique_suffix);
+    //@NOTE 为什么不直接加上一个后缀然后rename?
     if (s.IsNotFound()) {
       // We found a path for our file in trash
       *path_in_trash += unique_suffix;
