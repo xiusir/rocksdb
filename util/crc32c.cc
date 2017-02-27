@@ -313,6 +313,7 @@ static inline void Slow_CRC32(uint64_t* l, uint8_t const **p) {
   table2_[(c >> 8) & 0xff] ^
   table1_[(c >> 16) & 0xff] ^
   table0_[c >> 24];
+  //@NOTE 每次处理8个字节
 }
 
 static inline void Fast_CRC32(uint64_t* l, uint8_t const **p) {
@@ -326,6 +327,7 @@ static inline void Fast_CRC32(uint64_t* l, uint8_t const **p) {
   *l = _mm_crc32_u32(static_cast<unsigned int>(*l), LE_LOAD32(*p));
   *p += 4;
 #endif
+//@NOTE 利用sse4.2的crc32指令加速计算
 #else
   Slow_CRC32(l, p);
 #endif
@@ -385,6 +387,10 @@ static bool isSSE42() {
   return false;
 #endif
 }
+//@NOTE SSE42  intel的sse4.2指令集
+//加入新指令：CRC32、PCMPESTRI、PCMPESTRM、PCMPISTRI、PCMPISTRM、PCMPGTQ、POPCNT
+//XML的解析速度最高是原来的3.8倍，而指令周期节省可以达到2.7倍。
+// http://baike.baidu.com/item/SSE%204.2/138412?fromtitle=SSE4.2&fromid=4680786
 
 typedef uint32_t (*Function)(uint32_t, const char*, size_t);
 
