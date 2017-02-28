@@ -16,11 +16,15 @@ namespace rocksdb {
 
 class HistogramWindowingImpl : public Histogram
 {
+//@NOTE 按固定的时间窗口进行动态分桶统计的类
 public:
   HistogramWindowingImpl();
   HistogramWindowingImpl(uint64_t num_windows,
                          uint64_t micros_per_window,
                          uint64_t min_num_per_window);
+  //@NOTE num_windows 窗口数量
+  //micros_per_window 每个窗口的持续时间
+  //min_num_per_window 每个窗口最少的数据量
 
   HistogramWindowingImpl(const HistogramImpl&) = delete;
   HistogramWindowingImpl& operator=(const HistogramImpl&) = delete;

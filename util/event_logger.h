@@ -16,6 +16,9 @@
 namespace rocksdb {
 
 class JSONWriter {
+//@NOTE 为什么要实现一个JSONWritter? 
+//自己实现的性能更好？
+//不想因为这个引入第三方JSON包的复杂依赖？
  public:
   JSONWriter() : state_(kExpectKey), first_element_(true), in_array_(false) {
     stream_ << "{";

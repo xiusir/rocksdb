@@ -76,6 +76,7 @@ class RandomAccessFileReader {
 
   RandomAccessFileReader(RandomAccessFileReader&& o) ROCKSDB_NOEXCEPT {
     *this = std::move(o);
+    //@NOTE 进入方法后形参o是左值，所以使用std::move转成右值才能传给右值赋值方法。
   }
 
   RandomAccessFileReader& operator=(RandomAccessFileReader&& o) ROCKSDB_NOEXCEPT{
@@ -85,6 +86,8 @@ class RandomAccessFileReader {
     hist_type_ = std::move(o.hist_type_);
     file_read_hist_ = std::move(o.file_read_hist_);
     return *this;
+    //@NOTE 为什么不能用 *this = std::move(o)
+    //因为这样会造成无限循环调用自己..
   }
 
   RandomAccessFileReader(const RandomAccessFileReader&) = delete;
@@ -170,7 +173,9 @@ class WritableFileWriter {
  private:
   // Used when os buffering is OFF and we are writing
   // DMA such as in Direct I/O mode
+#ifndef ROCKSDB_LITE
   Status WriteDirect();
+#endif  // !ROCKSDB_LITE
   // Normal write
   Status WriteBuffered(const char* data, size_t size);
   Status RangeSync(uint64_t offset, uint64_t nbytes);

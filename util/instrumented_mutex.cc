@@ -19,6 +19,7 @@ bool ShouldReportToStats(Env* env, Statistics* stats) {
 void InstrumentedMutex::Lock() {
   PERF_CONDITIONAL_TIMER_FOR_MUTEX_GUARD(db_mutex_lock_nanos,
                                          stats_code_ == DB_MUTEX_WAIT_MICROS);
+  //@NOTE PERF_CONDITIONAL_TIMER_FOR_MUTEX_GUARD 计时
   uint64_t wait_time_micros = 0;
   if (ShouldReportToStats(env_, stats_)) {
     {

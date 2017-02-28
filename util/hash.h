@@ -26,6 +26,7 @@ inline uint32_t BloomHash(const Slice& key) {
 inline uint32_t GetSliceHash(const Slice& s) {
   return Hash(s.data(), s.size(), 397);
 }
+//@NOTE 0xbc9f1d34 和 397 有什么区别？
 
 // std::hash compatible interface.
 struct SliceHasher {

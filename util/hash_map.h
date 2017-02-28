@@ -26,6 +26,7 @@ namespace rocksdb {
 template <typename K, typename V, size_t size = 128>
 class HashMap {
   std::array<autovector<std::pair<K, V>, 1>, size> table_;
+  //@NOTE autovector 默认申请kSize个空间，若使用量大于kSize个，后续进入的item则使用标准std::vector
 
  public:
   bool Contains(K key) {

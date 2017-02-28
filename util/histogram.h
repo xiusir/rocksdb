@@ -94,6 +94,8 @@ struct HistogramStat {
 };
 
 class Histogram {
+//@NOTE 对整型数据进行动态分桶统计，将uint32范围分为138个桶，
+//统计落到每个桶的数据量，全局的和、平均数、标准差、百分位数。
 public:
   Histogram() {}
   virtual ~Histogram() {};

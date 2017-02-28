@@ -51,6 +51,7 @@ class InstrumentedMutex {
 // A wrapper class for port::Mutex that provides additional layer
 // for collecting stats and instrumentation.
 class InstrumentedMutexLock {
+//@NOTE 对port::Mutex的封装，提供了计时统计功能，通过析构方法执行unlock。
  public:
   explicit InstrumentedMutexLock(InstrumentedMutex* mutex) : mutex_(mutex) {
     mutex_->Lock();

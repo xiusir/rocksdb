@@ -36,17 +36,20 @@ namespace rocksdb {
 // The container uses the same counterintuitive ordering as
 // std::priority_queue: the comparison operator is expected to provide the
 // less-than relation, but top() will return the maximum.
+// @NOTE 比较函数是常规的小于 a<b，而数据结构是大根堆。
 
 template<typename T, typename Compare = std::less<T>>
 class BinaryHeap {
  public:
   BinaryHeap() { }
   explicit BinaryHeap(Compare cmp) : cmp_(std::move(cmp)) { }
+  //@NOTE 应该改为右值引用？ Compare&& cmp
 
   void push(const T& value) {
     data_.push_back(value);
     upheap(data_.size() - 1);
   }
+  //@NOTE 可以改为push(std::move(value)) ?
 
   void push(T&& value) {
     data_.push_back(std::move(value));
@@ -59,9 +62,12 @@ class BinaryHeap {
   }
 
   void replace_top(const T& value) {
+  //@NOTE 传统的std::priority_queue
+  //需要先pop()再push()，才能完成这种直接替换堆顶的操作
     assert(!empty());
     data_.front() = value;
     downheap(get_root());
+    //@NOTE 有必要设置一个get_root函数吗...
   }
 
   void replace_top(T&& value) {
@@ -84,6 +90,8 @@ class BinaryHeap {
   void swap(BinaryHeap &other) {
     std::swap(cmp_, other.cmp_);
     data_.swap(other.data_);
+    //@NOTE autovector不支持std::swap() ?
+    //为什么不能 std::swap(data_, other.data_) ?
     std::swap(root_cmp_cache_, other.root_cmp_cache_);
   }
 
@@ -149,6 +157,8 @@ class BinaryHeap {
       // cache that `picked_child` is the smallest child
       // so next time we compare againist it directly
       root_cmp_cache_ = picked_child;
+      //@NOTE 当新进数据经常大于堆顶的两个子节点时效果很好。
+      //即replace_pop时堆结构没必要调整。
     } else {
       // the tree changed, reset cache
       reset_root_cmp_cache();

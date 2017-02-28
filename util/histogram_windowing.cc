@@ -76,6 +76,7 @@ void HistogramWindowingImpl::Merge(const HistogramWindowingImpl& other) {
       micros_per_window_ != other.micros_per_window_) {
     return;
   }
+  //@NOTE 是不是应该先判断，然后执行stats_.Merge ?
 
   uint64_t cur_window = current_window();
   uint64_t other_cur_window = other.current_window();
@@ -108,8 +109,10 @@ double HistogramWindowingImpl::Percentile(double p) const {
     if (stats_.num() >= start_num) {
       return result;
     }
+    //@NOTE 这个条件不严谨? ...同时应该看current_window是否变化
   }
   return 0.0;
+  //@NOTE 这个函数真的能用吗？
 }
 
 double HistogramWindowingImpl::Average() const {
@@ -125,6 +128,9 @@ void HistogramWindowingImpl::Data(HistogramData * const data) const {
 }
 
 void HistogramWindowingImpl::TimerTick() {
+//@NOTE 同时满足下列条件时，滑动时间窗口
+//1. 距上一次操作的时间已超过窗口时间周期
+//2. 当前窗口装入数据量达到配置的最小数量
   uint64_t curr_time = env_->NowMicros();
   if (curr_time - last_swap_time() > micros_per_window_ &&
       window_stats_[current_window()].num() >= min_num_per_window_) {
@@ -134,7 +140,7 @@ void HistogramWindowingImpl::TimerTick() {
 
 void HistogramWindowingImpl::SwapHistoryBucket() {
   // Threads executing Add() would be competing for this mutex, the first one
-  // who got the metex would take care of the bucket swap, other threads
+  // who got the mutex would take care of the bucket swap, other threads
   // can skip this.
   // If mutex is held by Merge() or Clear(), next Add() will take care of the
   // swap, if needed.

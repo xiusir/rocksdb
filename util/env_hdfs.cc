@@ -71,6 +71,7 @@ class HdfsReadableFile : virtual public SequentialFile,
         "[hdfs] HdfsReadableFile closing file %s\n",
         filename_.c_str());
     hdfsCloseFile(fileSys_, hfile_);
+    //@NOTE 没有判断 hfile_ != nullptr
     Log(InfoLogLevel::DEBUG_LEVEL, mylog,
         "[hdfs] HdfsReadableFile closed file %s\n",
         filename_.c_str());
@@ -83,6 +84,8 @@ class HdfsReadableFile : virtual public SequentialFile,
 
   // sequential access, read data at current offset in file
   virtual Status Read(size_t n, Slice* result, char* scratch) {
+  //@NOTE scratch就是外部给的buffer，写入后填到result.
+  //为什么不直接设计成 Read(const Slice&) 和 Read(size_t, char*) ?
     Status s;
     Log(InfoLogLevel::DEBUG_LEVEL, mylog,
         "[hdfs] HdfsReadableFile reading %s %ld\n",
@@ -112,6 +115,7 @@ class HdfsReadableFile : virtual public SequentialFile,
 
     if (bytes_read < 0) {
       s = IOError(filename_, errno);
+      //@NOTE errno ?
     } else {
       *result = Slice(scratch, total_bytes_read);
     }
@@ -237,6 +241,7 @@ class HdfsWritableFile: public WritableFile {
 
   virtual Status Flush() {
     return Status::OK();
+    //@NOTE -_-!...
   }
 
   virtual Status Sync() {
@@ -300,6 +305,7 @@ class HdfsLogger : public Logger {
   }
 
   virtual void Logv(const char* format, va_list ap) {
+    //@NOTE 这段代码太难看了... 为了性能？
     const uint64_t thread_id = (*gettid_)();
 
     // We try twice: the first time with a fixed-size stack allocated buffer,
@@ -340,6 +346,7 @@ class HdfsLogger : public Logger {
         va_copy(backup_ap, ap);
         p += vsnprintf(p, limit - p, format, backup_ap);
         va_end(backup_ap);
+        //@NOTE vsnprintf 变长参数的snprintf
       }
 
       // Truncate to available space if necessary
