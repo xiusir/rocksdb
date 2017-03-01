@@ -9,6 +9,7 @@
   All code is released to the public domain. For business purposes, Murmurhash is
   under the MIT license.
 */
+//@NOTE https://zh.wikipedia.org/wiki/Murmur%E5%93%88%E5%B8%8C
 #pragma once
 #include <stdint.h>
 #include "rocksdb/slice.h"
