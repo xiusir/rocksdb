@@ -224,6 +224,7 @@ class PosixEnv : public Env {
         if (base != MAP_FAILED) {
           result->reset(new PosixMmapReadableFile(fd, fname, base,
                                                   size, options));
+          //@NOTE 为什么mmap调用没有放在PosixMmapReadableFile里？
         } else {
           s = IOError(fname, errno);
         }

@@ -131,6 +131,7 @@ class PosixMmapReadableFile : public RandomAccessFile {
  public:
   PosixMmapReadableFile(const int fd, const std::string& fname, void* base,
                         size_t length, const EnvOptions& options);
+  //@NOTE 构造函数调用之前base已经被mmap了?
   virtual ~PosixMmapReadableFile();
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const override;
@@ -155,8 +156,10 @@ class PosixMmapFile : public WritableFile {
 
   // Roundup x to a multiple of y
   static size_t Roundup(size_t x, size_t y) { return ((x + y - 1) / y) * y; }
+  //@NOTE 将x向右对齐到第一个y的整数倍
 
   size_t TruncateToPageBoundary(size_t s) {
+  //@NOTE 将s截断到前一个page边界，左对齐.
     s -= (s & (page_size_ - 1));
     assert((s % page_size_) == 0);
     return s;

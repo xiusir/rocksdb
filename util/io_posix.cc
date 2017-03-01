@@ -42,6 +42,8 @@ namespace rocksdb {
 int Fadvise(int fd, off_t offset, size_t len, int advice) {
 #ifdef OS_LINUX
   return posix_fadvise(fd, offset, len, advice);
+  //@NOTE linux系统函数 提前告知系统内核要访问的文件和偏移量，
+  //系统内核可以对即将到来的io请求进行适地优化调度。
 #else
   return 0;  // simply do nothing.
 #endif
@@ -97,7 +99,12 @@ Status PosixSequentialFile::Read(size_t n, Slice* result, char* scratch) {
   size_t r = 0;
   do {
     r = fread_unlocked(scratch, 1, n, file_);
+    //@NOTE fread_unlocked功能与fread相似，但不会隐式地对FILE* file_加锁。
+    //即 非线程安全。
   } while (r == 0 && ferror(file_) && errno == EINTR);
+  //@NOTE errno == EINTR 表示io操作遇到了中断，可以尝试重新发起IO操作。
+  //但是遇到中断时，fread_unlocked返回值是0吗？
+  // http://www.cnblogs.com/flyfish10000/articles/2576885.html
   *result = Slice(scratch, r);
   if (r < n) {
     if (feof(file_)) {
@@ -113,6 +120,7 @@ Status PosixSequentialFile::Read(size_t n, Slice* result, char* scratch) {
   // we need to fadvise away the entire range of pages because
   // we do not want readahead pages to be cached under buffered io
   Fadvise(fd_, 0, 0, POSIX_FADV_DONTNEED);  // free OS pages
+  //@NOTE 告知内核放弃对fd_的io优化
   return s;
 }
 
@@ -125,10 +133,13 @@ Status PosixSequentialFile::PositionedRead(uint64_t offset, size_t n,
   assert(use_direct_io());
   while (left > 0) {
     r = pread(fd_, ptr, left, static_cast<off_t>(offset));
+    //@NOTE pread,read,readv 返回值-1表示故障并设置errno
+    //fread 返回值为非负数，返回值和故障之间没有必然联系
     if (r <= 0) {
       if (r == -1 && errno == EINTR) {
         continue;
       }
+      //@NOTE else feof(file_) must be true
       break;
     }
     ptr += r;
@@ -149,6 +160,7 @@ Status PosixSequentialFile::PositionedRead(uint64_t offset, size_t n,
 }
 
 Status PosixSequentialFile::Skip(uint64_t n) {
+//@NOTE n 应该用 offset 更好
   if (fseek(file_, static_cast<long int>(n), SEEK_CUR)) {
     return IOError(filename_, errno);
   }
@@ -156,6 +168,7 @@ Status PosixSequentialFile::Skip(uint64_t n) {
 }
 
 Status PosixSequentialFile::InvalidateCache(size_t offset, size_t length) {
+//@NOTE 主动使Cache失效
 #ifndef OS_LINUX
   return Status::OK();
 #else
@@ -175,6 +188,7 @@ Status PosixSequentialFile::InvalidateCache(size_t offset, size_t length) {
  */
 #if defined(OS_LINUX)
 size_t PosixHelper::GetUniqueIdFromFile(int fd, char* id, size_t max_size) {
+//@NOTE 根据文件stat信息生成UniqueId
   if (max_size < kMaxVarint64Length * 3) {
     return 0;
   }
@@ -329,8 +343,10 @@ PosixMmapReadableFile::PosixMmapReadableFile(const int fd,
                                              const EnvOptions& options)
     : fd_(fd), filename_(fname), mmapped_region_(base), length_(length) {
   fd_ = fd_ + 0;  // suppress the warning for used variables
+  //@NOTE 有必要吗...
   assert(options.use_mmap_reads);
   assert(!options.use_direct_reads);
+  //@NOTE 构造函数调用之前base已经被mmap了?
 }
 
 PosixMmapReadableFile::~PosixMmapReadableFile() {
@@ -397,6 +413,7 @@ Status PosixMmapFile::UnmapCurrentRegion() {
 }
 
 Status PosixMmapFile::MapNewRegion() {
+//@NOTE 写入数据时空间不足，调用MapNewRegion扩展当前当前文件。
 #ifdef ROCKSDB_FALLOCATE_PRESENT
   assert(base_ == nullptr);
   TEST_KILL_RANDOM("PosixMmapFile::UnmapCurrentRegion:0", rocksdb_kill_odds);
@@ -404,6 +421,8 @@ Status PosixMmapFile::MapNewRegion() {
   if (allow_fallocate_) {
     IOSTATS_TIMER_GUARD(allocate_nanos);
     int alloc_status = fallocate(fd_, 0, file_offset_, map_size_);
+    //@NOTE fallocate 申请磁盘空间，允许调用者直接操作为fd_分配的磁盘空间。
+    //后续读写操作不会因磁盘空间不足而失败。
     if (alloc_status != 0) {
       // fallback to posix_fallocate
       alloc_status = posix_fallocate(fd_, file_offset_, map_size_);

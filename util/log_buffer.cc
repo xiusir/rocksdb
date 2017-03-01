@@ -11,7 +11,7 @@
 namespace rocksdb {
 
 LogBuffer::LogBuffer(const InfoLogLevel log_level,
-                     Logger*info_log)
+                     Logger* info_log)
     : log_level_(log_level), info_log_(info_log) {}
 
 void LogBuffer::AddLogToBuffer(size_t max_log_size, const char* format,
@@ -23,16 +23,21 @@ void LogBuffer::AddLogToBuffer(size_t max_log_size, const char* format,
 
   char* alloc_mem = arena_.AllocateAligned(max_log_size);
   BufferedLog* buffered_log = new (alloc_mem) BufferedLog();
+  //@NOTE 如果max_log_size < sizeof(BufferedLog) bufferd_log是一个越界的内存区
   char* p = buffered_log->message;
   char* limit = alloc_mem + max_log_size - 1;
+  //@NOTE  - 1 是为了末尾填个'\0'
 
   // store the time
   gettimeofday(&(buffered_log->now_tv), nullptr);
 
   // Print the message
   if (p < limit) {
+  //@NOTE 为什么要判断 p < limit? 
+  //应该在函数开始时保证 max_log_size > sizeof(BufferedLog) + x
     va_list backup_ap;
     va_copy(backup_ap, ap);
+    //@NOTE va_copy macro 将ap复制到backup_ap，必须与va_end配对使用
     auto n = vsnprintf(p, limit - p, format, backup_ap);
 #ifndef OS_WIN
     // MS reports -1 when the buffer is too short
@@ -74,6 +79,9 @@ void LogToBuffer(LogBuffer* log_buffer, size_t max_log_size, const char* format,
   if (log_buffer != nullptr) {
     va_list ap;
     va_start(ap, format);
+    //@NOTE va_start 使用ap表示形参format后的变参列表，需要与va_end配合使用
+    //va_arg 依次访问下一个变参，类似于next_va_arg函数
+    //va_end 停止遍历变参列表
     log_buffer->AddLogToBuffer(max_log_size, format, ap);
     va_end(ap);
   }
