@@ -43,8 +43,10 @@ LRUHandle* LRUHandleTable::Insert(LRUHandle* h) {
   LRUHandle** ptr = FindPointer(h->key(), h->hash);
   LRUHandle* old = *ptr;
   h->next_hash = (old == nullptr ? nullptr : old->next_hash);
+  //@NOTE 新节点的next_hash指向old->next_hash，相当于把old从链表上删除
   *ptr = h;
   if (old == nullptr) {
+  //@NOTE 新key
     ++elems_;
     if (elems_ > length_) {
       // Since each cache entry is fairly large, we aim for a small
@@ -212,8 +214,11 @@ void LRUCacheShard::EvictFromLRU(size_t charge,
                                  autovector<LRUHandle*>* deleted) {
   while (usage_ + charge > capacity_ && lru_.next != &lru_) {
     LRUHandle* old = lru_.next;
+    //@NOTE lru_.next 指向低优先级中最早进入lru_的节点
     assert(old->InCache());
     assert(old->refs == 1);  // LRU list contains elements which may be evicted
+    //@NOTE 为什么EnvictFromLRU要求缓存中的节点未被外部引用
+    //因为lru_是可以被释放的节点构成的链表
     LRU_Remove(old);
     table_.Remove(old->key(), old->hash);
     old->SetInCache(false);
@@ -250,6 +255,8 @@ Cache::Handle* LRUCacheShard::Lookup(const Slice& key, uint32_t hash) {
     assert(e->InCache());
     if (e->refs == 1) {
       LRU_Remove(e);
+      //@NOTE 为什么查到之后删掉
+      //从待回收队列里删掉e，是合理的。
     }
     e->refs++;
   }
@@ -348,7 +355,9 @@ Status LRUCacheShard::Insert(const Slice& key, uint32_t hash, void* value,
         // Don't insert the entry but still return ok, as if the entry inserted
         // into cache and get evicted immediately.
         last_reference_list.push_back(e);
+        //@NOTE handle == nullptr 表示新插入的节点是可以被立即释放的，外面不急用...
       } else {
+        //@NOTE 告知外部调用者insert失败，把前面申请的内存释放。
         delete[] reinterpret_cast<char*>(e);
         *handle = nullptr;
         s = Status::Incomplete("Insert failed due to LRU cache being full.");
@@ -370,6 +379,7 @@ Status LRUCacheShard::Insert(const Slice& key, uint32_t hash, void* value,
         }
       }
       if (handle == nullptr) {
+      //@NOTE 没有外部引用，所以可以放进待回收队列
         LRU_Insert(e);
       } else {
         *handle = reinterpret_cast<Cache::Handle*>(e);
@@ -485,6 +495,7 @@ std::shared_ptr<Cache> NewLRUCache(size_t capacity, int num_shard_bits,
   }
   return std::make_shared<LRUCache>(capacity, num_shard_bits,
                                     strict_capacity_limit, high_pri_pool_ratio);
+  //@NOTE std::make_shared 创建shared_ptr，将指针构造和LRUCache构造合在一起做。
 }
 
 }  // namespace rocksdb

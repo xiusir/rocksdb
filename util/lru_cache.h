@@ -31,6 +31,9 @@ namespace rocksdb {
 // in the LRU and can be freed. (refs == 1 && in_cache == true)
 // 3. Referenced externally and not in hash table. In that case the entry is
 // in not on LRU and not in table. (refs >= 1 && in_cache == false)
+//@NOTE 状态3的描述有错，和下面的代码不符，按代码解读
+//应该是 No referenced externally and not in hash table,
+//即 refs == 0 && in_cache == false
 //
 // All newly created LRUHandles are in state 1. If you call
 // LRUCacheShard::Release
@@ -42,6 +45,10 @@ namespace rocksdb {
 // that any successful LRUCacheShard::Lookup/LRUCacheShard::Insert have a
 // matching
 // RUCache::Release (to move into state 2) or LRUCacheShard::Erase (for state 3)
+//
+// 状态1 是正常状态，表示在缓存中且被外部引用
+// 状态2 是临界状态，表示在缓存中，未被外界访问可以被释放
+// 状态3 是删除状态，表示主动从缓存中删除
 
 struct LRUHandle {
   void* value;
@@ -49,6 +56,9 @@ struct LRUHandle {
   LRUHandle* next_hash;
   LRUHandle* next;
   LRUHandle* prev;
+  //@NOTE next_hash 和 next有什么区别...
+  //next_hash是LRUHandle在LRUHashTable中的连接关系
+  //next,prev是LRUHandle在LRUCacheShard的lru_的连接关系
   size_t charge;  // TODO(opt): Only allow uint32_t?
   size_t key_length;
   uint32_t refs;     // a number of refs to this entry
@@ -104,10 +114,12 @@ struct LRUHandle {
 
   void Free() {
     assert((refs == 1 && InCache()) || (refs == 0 && !InCache()));
+    //@NOTE State2 or State3
     if (deleter) {
       (*deleter)(key(), value);
     }
     delete[] reinterpret_cast<char*>(this);
+    //@NOTE 为什么要delete [] this ?
   }
 };
 
@@ -246,6 +258,19 @@ class LRUCacheShard : public CacheShard {
   // lru.prev is newest entry, lru.next is oldest entry.
   // LRU contains items which can be evicted, ie reference only by cache
   LRUHandle lru_;
+  //@NOTE
+  // hi表示the i-th earlest high priority node
+  // li表示the i-th earlest high priority node
+  //                                                              
+  // |h1|<->|h2|<->|h3|<->|lru_|<->|l1|<->|l2|<->|l3|<->|l4|<->|l5| <- lru_low_pri_
+  //  |                                                         |
+  //  |---------------------------------------------------------|
+  //
+  //EvictFromLRU 从lru_.next开始依次回收，即先回收低优先级，按先进先出顺序，
+  //然后回收高优先级，也是先进先出的顺序。
+  //
+  //调整high_pri_pool_ratio_时，即将lru_low_pri_向高优先级移动，将高优先级
+  //最早进入lru_的节点放入低优先级pool。
 
   // Pointer to head of low-pri pool in LRU list.
   LRUHandle* lru_low_pri_;
