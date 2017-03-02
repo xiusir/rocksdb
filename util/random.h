@@ -92,6 +92,7 @@ class Random64 {
   // REQUIRES: n > 0
   uint64_t Uniform(uint64_t n) {
     return std::uniform_int_distribution<uint64_t>(0, n - 1)(generator_);
+    //@NOTE std::uniform_int_distribution 随机数生成器，返回[a,b]的任一值
   }
 
   // Randomly returns true ~"1/n" of the time, and false otherwise.

@@ -120,6 +120,8 @@ struct LRUHandle {
     }
     delete[] reinterpret_cast<char*>(this);
     //@NOTE 为什么要delete [] this ?
+    //Free() 当做析构函数使用...
+    // http://stackoverflow.com/questions/3150942/is-delete-this-allowed
   }
 };
 

@@ -107,6 +107,21 @@ class SpinMutex {
            locked_.compare_exchange_weak(currently_locked, true,
                                          std::memory_order_acquire,
                                          std::memory_order_relaxed);
+    //@NOTE 原子cas：若状态为unlocked则置为locked。
+    //std::atomic::compare_exchange_weak 返回true表示成功修改变量值。
+    //为什么不直接用 compare_exchange_weak(false, true, ...) ?
+    //std::atomic::load 代价比compare_exchange_weak低??
+    //先进行一次状态判断，可以减少直接compare_exchange_weak = false的代价？
+    //
+    // http://en.cppreference.com/w/cpp/atomic/atomic/compare_exchange
+    //
+    // compare_exchange_weak 与 compare_exchange_strong 区别：
+    // _weak 允许将compare结果误判为false导致不进行exchange，
+    //       所以需要循环执行多次得到可靠结果，
+    //       如果原子类型是包含padding bit/trap bit 或相同值对应
+    //       多种不同二进制状态(浮点型)，weak效果更好，能快速收敛
+    //       到稳定的结果。
+    // _strong 强一致性，结果是可靠的，但性能稍差。
   }
 
   void lock() {
@@ -116,8 +131,19 @@ class SpinMutex {
         break;
       }
       port::AsmVolatilePause();
+      //@NOTE asm pause指令 是专门为自旋锁提供的一个指令，
+      //告知处理器当前代码是spin-wait-loop，处理器会根据这个提示而避开
+      //内存序列冲突(memory order violation)，也就是说对spin-wait-loop
+      //不做缓存，不做指令重新排序等动作。这样就可以大大的提高了处理器的性能。
+      //PAUSE另一个功能是让处理器执行spin-wait-loop时减少电源的消耗。
+      //在等待资源而执行自旋锁等待时，处理器以极快的速度执行自旋等待，
+      //PAUSE 指令实际上就相当于 NOP 指令。
       if (tries > 100) {
         std::this_thread::yield();
+        //@NOTE 提示内核当前线程想让出执行资源，休息一会儿，可以避免死锁
+        //多个线程抢锁时非常像死循环，一直占用cpu资源，会导致拥有锁的线程
+        //无法被及时调度运行释放锁，这样会造成等锁时间非常长，看上去像死锁
+        // http://en.cppreference.com/w/cpp/thread/yield
       }
     }
   }

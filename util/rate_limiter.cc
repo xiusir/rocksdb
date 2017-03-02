@@ -44,6 +44,7 @@ GenericRateLimiter::GenericRateLimiter(int64_t rate_bytes_per_sec,
   total_requests_[1] = 0;
   total_bytes_through_[0] = 0;
   total_bytes_through_[1] = 0;
+  //@NOTE 用Env::IO_HIGH、Env::IO_LOW比较好
 }
 
 GenericRateLimiter::~GenericRateLimiter() {
@@ -57,9 +58,11 @@ GenericRateLimiter::~GenericRateLimiter() {
   for (auto& r : queue_[Env::IO_LOW]) {
     r->cv.Signal();
   }
+  //@NOTE 通知各个请求的发起者赶快处理
   while (requests_to_wait_ > 0) {
     exit_cv_.Wait();
   }
+  //@NOTE 等待堆积的请求被消化完
 }
 
 // This API allows user to dynamically change rate limiter's bytes per second.
@@ -86,6 +89,7 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri) {
     // is waiting?
     available_bytes_ -= bytes;
     total_bytes_through_[pri] += bytes;
+    //@NOTE 前一个周期的额度没用完，直接放行
     return;
   }
 
@@ -111,6 +115,7 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri) {
     } else {
       // Not at the front of queue or an leader has already been elected
       r.cv.Wait();
+      //@NOTE 只有被granted或处于队首才会被唤醒
     }
 
     // request_mutex_ is held from now on
@@ -185,8 +190,12 @@ void GenericRateLimiter::Refill() {
   if (available_bytes_ < refill_bytes_per_period) {
     available_bytes_ += refill_bytes_per_period;
   }
+  //@NOTE 前一个周期的额度没用完，
+  //如果前一个周期的剩余额度大于等于周期速率则放弃新额度。
+  //避免流量较低是累积额度过多导致突发的流量高峰，相当于限速器失效。
 
   int use_low_pri_first = rnd_.OneIn(fairness_) ? 0 : 1;
+  //@NOTE 根据fairness_指定的概率选择优先级
   for (int q = 0; q < 2; ++q) {
     auto use_pri = (use_low_pri_first == q) ? Env::IO_LOW : Env::IO_HIGH;
     auto* queue = &queue_[use_pri];
@@ -214,13 +223,18 @@ void GenericRateLimiter::Refill() {
 
 int64_t GenericRateLimiter::CalculateRefillBytesPerPeriod(
     int64_t rate_bytes_per_sec) {
+//@NOTE 根据每秒速率计算每个周期的速率
+// refill_bytes_per_period = refill_period_us_ / 1000000 * rate_bytes_per_sec
   if (port::kMaxInt64 / rate_bytes_per_sec < refill_period_us_) {
+  //@NOTE if (port::kMaxInt64 / 100000 / rate_bytes_per_sec < refill_period_us_ / 100000) {
     // Avoid unexpected result in the overflow case. The result now is still
     // inaccurate but is a number that is large enough.
     return port::kMaxInt64 / 1000000;
+    //@NOTE 不希望结果大于kMaxInt64/1000000
   } else {
     return std::max(kMinRefillBytesPerPeriod,
                     rate_bytes_per_sec * refill_period_us_ / 1000000);
+    //@NOTE 不希望结果小于kMinRefillBytesPerPeriod
   }
 }
 

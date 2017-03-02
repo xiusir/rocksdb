@@ -21,6 +21,7 @@
 namespace rocksdb {
 
 class GenericRateLimiter : public RateLimiter {
+//@NOTE 一般的限速器，支持分优先级限速
  public:
   GenericRateLimiter(int64_t refill_bytes,
       int64_t refill_period_us, int32_t fairness);
@@ -61,15 +62,18 @@ class GenericRateLimiter : public RateLimiter {
  private:
   void Refill();
   int64_t CalculateRefillBytesPerPeriod(int64_t rate_bytes_per_sec);
+  //@NOTE 根据每秒数据量计算每个周期数据量
 
   // This mutex guard all internal states
   mutable port::Mutex request_mutex_;
 
   const int64_t kMinRefillBytesPerPeriod = 100;
+  //@NOTE 每个周期最小速率数据量
 
   const int64_t refill_period_us_;
   // This variable can be changed dynamically.
   std::atomic<int64_t> refill_bytes_per_period_;
+  //@NOTE 每个周期可以流过的数据量
   Env* const env_;
 
   bool stop_;
@@ -77,9 +81,12 @@ class GenericRateLimiter : public RateLimiter {
   int32_t requests_to_wait_;
 
   int64_t total_requests_[Env::IO_TOTAL];
+  //@NOTE 每个优先级通道流过的请求量
   int64_t total_bytes_through_[Env::IO_TOTAL];
+  //@NOTE 每个优先级通道流过的数据量
   int64_t available_bytes_;
   int64_t next_refill_us_;
+  //@NOTe 下一个放行时间点
 
   int32_t fairness_;
   Random rnd_;
@@ -87,6 +94,7 @@ class GenericRateLimiter : public RateLimiter {
   struct Req;
   Req* leader_;
   std::deque<Req*> queue_[Env::IO_TOTAL];
+  //@NOTE 每个优先级通道待处理的请求
 };
 
 }  // namespace rocksdb
