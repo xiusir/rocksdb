@@ -142,6 +142,7 @@ inline int Slice::compare(const Slice& b) const {
   if (r == 0) {
     if (size_ < b.size_) r = -1;
     else if (size_ > b.size_) r = +1;
+    //@NOTE 用+1让代码更直观... 有必要吗...
   }
   return r;
 }

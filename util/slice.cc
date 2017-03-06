@@ -18,6 +18,7 @@ namespace rocksdb {
 namespace {
 
 class FixedPrefixTransform : public SliceTransform {
+//@NOTE 取输入Slice的前n个字节前缀作为新的Slice
  private:
   size_t prefix_len_;
   std::string name_;
@@ -53,6 +54,7 @@ class FixedPrefixTransform : public SliceTransform {
 };
 
 class CappedPrefixTransform : public SliceTransform {
+//@NOTE 限制输入Slice的长度，至多取前n个字节作为新的Slice
  private:
   size_t cap_len_;
   std::string name_;
@@ -86,6 +88,7 @@ class CappedPrefixTransform : public SliceTransform {
 };
 
 class NoopTransform : public SliceTransform {
+//@NOTE 空转换，即不做任何转换。。。
  public:
   explicit NoopTransform() { }
 

@@ -238,6 +238,7 @@ class Status {
   const char* state_;
 
   static const char* msgs[static_cast<int>(kMaxSubCode)];
+  //@NOTE 在哪初始化 - util/status_message.cc
 
   explicit Status(Code _code, SubCode _subcode = kNone)
       : code_(_code), subcode_(_subcode), state_(nullptr) {}

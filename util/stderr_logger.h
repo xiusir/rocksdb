@@ -21,6 +21,8 @@ class StderrLogger : public Logger {
   // Brings overloaded Logv()s into scope so they're not hidden when we override
   // a subset of them.
   using Logger::Logv;
+  //@NOTE 将父类的Logv方法全部引入，避免被下面的一个重载方法使得其他同名方法被隐藏。
+  // http://en.cppreference.com/w/cpp/language/using_declaration
 
   virtual void Logv(const char* format, va_list ap) override {
     vfprintf(stderr, format, ap);

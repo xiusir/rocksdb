@@ -137,6 +137,8 @@ void SyncPoint::Process(const std::string& point, void* cb_arg) {
   if (DisabledByMarker(point, thread_id)) {
     return;
   }
+  //@NOTE 为什么DisabledByMarker后，就不用PredecessorsAllCleared
+  //当前point必须被当前线程标记过才生效。
 
   while (!PredecessorsAllCleared(point)) {
     cv_.wait(lock);

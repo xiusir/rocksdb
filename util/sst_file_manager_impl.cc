@@ -27,6 +27,7 @@ SstFileManagerImpl::SstFileManagerImpl(Env* env, std::shared_ptr<Logger> logger,
                         this) {}
 
 SstFileManagerImpl::~SstFileManagerImpl() {}
+//@NOTE 为什么没有调用WaitForEmptyTrash
 
 Status SstFileManagerImpl::OnAddFile(const std::string& file_path) {
   uint64_t file_size;
@@ -134,6 +135,7 @@ SstFileManager* NewSstFileManager(Env* env, std::shared_ptr<Logger> info_log,
       s = env->GetChildren(trash_dir, &files_in_trash);
       if (s.ok()) {
         for (const std::string& trash_file : files_in_trash) {
+        //@NOTE 可以使用C++11 auto关键字
           if (trash_file == "." || trash_file == "..") {
             continue;
           }
@@ -143,8 +145,10 @@ SstFileManager* NewSstFileManager(Env* env, std::shared_ptr<Logger> info_log,
           Status file_delete = res->ScheduleFileDeletion(path_in_trash);
           if (s.ok() && !file_delete.ok()) {
             s = file_delete;
+            //@NOTE 好奇怪...
           }
         }
+        //@NOTE 为什么不调用WaitForEmptyTrash?
       }
     }
   }

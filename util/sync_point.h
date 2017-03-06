@@ -63,6 +63,7 @@ namespace rocksdb {
 class SyncPoint {
  public:
   static SyncPoint* GetInstance();
+  //@NOTE 单例模式
 
   struct SyncPointPair {
     std::string predecessor;

@@ -88,6 +88,8 @@ class ShardedCache : public Cache {
   uint32_t Shard(uint32_t hash) {
     // Note, hash >> 32 yields hash in gcc, not the zero we expect!
     return (num_shard_bits_ > 0) ? (hash >> (32 - num_shard_bits_)) : 0;
+    //@NOTE 真是这样吗-- gcc48结果是 x>>32 值是x本身...
+    //同时warning: shift count >= width of type
   }
 
   int num_shard_bits_;
