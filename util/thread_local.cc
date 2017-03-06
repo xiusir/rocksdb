@@ -149,6 +149,8 @@ private:
 
 #ifdef ROCKSDB_SUPPORT_THREAD_LOCAL
 __thread ThreadData* ThreadLocalPtr::StaticMeta::tls_ = nullptr;
+//@NOTE 每个线程会创建一个独立的ThreadData* 从而实现了每个线程访问自己的Instance()->tls_
+// https://gcc.gnu.org/onlinedocs/gcc-4.1.0/gcc/Thread_002dLocal.html
 #endif
 
 // Windows doesn't support a per-thread destructor with its
@@ -327,6 +329,9 @@ ThreadLocalPtr::StaticMeta::StaticMeta() : next_instance_id_(0), head_(this) {
     }
   } a;
 #endif  // !defined(OS_WIN)
+  //@NOTE 大概意思是静态对象析构函数晚于StaticMeta，因为StaticMeta构造方法
+  //早于这个静态对象。利用这一点可以避免内存泄漏，因为主线程不会调用OnThreadExit。
+  //没搞懂这个奇技淫巧...
 
   head_.next = &head_;
   head_.prev = &head_;
@@ -428,6 +433,7 @@ bool ThreadLocalPtr::StaticMeta::CompareAndSwap(uint32_t id, void* ptr,
 void ThreadLocalPtr::StaticMeta::Scrape(uint32_t id, autovector<void*>* ptrs,
     void* const replacement) {
   MutexLock l(Mutex());
+//@NOTE 将每个线程的第id-th指针替换为replacement，原值保存到ptrs
   for (ThreadData* t = head_.next; t != &head_; t = t->next) {
     if (id < t->entries.size()) {
       void* ptr =
@@ -440,6 +446,7 @@ void ThreadLocalPtr::StaticMeta::Scrape(uint32_t id, autovector<void*>* ptrs,
 }
 
 void ThreadLocalPtr::StaticMeta::Fold(uint32_t id, FoldFunc func, void* res) {
+//@NOTE 对所有线程的第id-th元素执行func函数
   MutexLock l(Mutex());
   for (ThreadData* t = head_.next; t != &head_; t = t->next) {
     if (id < t->entries.size()) {
@@ -491,6 +498,7 @@ uint32_t ThreadLocalPtr::StaticMeta::PeekId() const {
 void ThreadLocalPtr::StaticMeta::ReclaimId(uint32_t id) {
   // This id is not used, go through all thread local data and release
   // corresponding value
+  //@NOTE 回收id
   MutexLock l(Mutex());
   auto unref = GetHandler(id);
   for (ThreadData* t = head_.next; t != &head_; t = t->next) {

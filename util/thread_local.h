@@ -42,6 +42,9 @@ typedef void (*UnrefHandler)(void* ptr);
 // the same A.  However, a ThreadLocalPtr that is defined under the
 // scope of DBImpl can avoid such confliction.  As a result, its memory
 // usage would be O(# of threads * # of ThreadLocalPtr instances).
+//
+//@NOTE declared in DBImpl 和 defined under the scope of DBImpl ?
+// http://www.cprogramming.com/declare_vs_define.html
 class ThreadLocalPtr {
  public:
   explicit ThreadLocalPtr(UnrefHandler handler = nullptr);
