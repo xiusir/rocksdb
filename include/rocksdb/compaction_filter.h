@@ -37,6 +37,7 @@ class CompactionFilter {
     kValue,
     kMergeOperand,
   };
+  //@NOTE 表示key-value是一个普通值还是Merge操作结果
 
   enum class Decision {
     kKeep,
@@ -44,6 +45,7 @@ class CompactionFilter {
     kChangeValue,
     kRemoveAndSkipUntil,
   };
+  //@NOTE 处理决定
 
   // Context information of a compaction run
   struct Context {
