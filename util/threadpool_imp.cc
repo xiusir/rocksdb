@@ -39,6 +39,10 @@ namespace {
 struct Lock {
   std::unique_lock<std::mutex> ul_;
   explicit Lock(std::mutex& m) : ul_(m, std::defer_lock) {}
+  //@NOTE std::unique_lock是一个通用的mutex所有者，支持 deferred locking
+  //std::defer_lock 不获取锁的拥有权。
+  //defered locking即创建时不抢占互斥锁
+  // http://stackoverflow.com/questions/27089434/whats-the-difference-between-first-locking-and-creating-a-lock-guardadopt-lock
 };
 
 using Condition = std::condition_variable;
@@ -174,6 +178,10 @@ void ThreadPoolImpl::BGThread(size_t thread_id) {
            (queue_.empty() || IsExcessiveThread(thread_id))) {
       PthreadCall("wait", ConditionWait(bgsignal_, uniqueLock));
     }
+    //@NOTE 当前线程一直等待直到：
+    //1) 被通知停止运行
+    //2) 成为最后一个多余线程
+    //3) 任务队列非空且自己不是多余线程
 
     if (exit_all_threads_) {  // mechanism to let BG threads exit safely
       PthreadCall("unlock", MutexUnlock(uniqueLock));
@@ -186,15 +194,20 @@ void ThreadPoolImpl::BGThread(size_t thread_id) {
       // generation time.
       auto& terminating_thread = bgthreads_.back();
       PthreadCall("detach", ThreadDetach(terminating_thread));
+      //@NOTE std::thread::detach
+      // 将线程的执行与线程对象分离，使得线程可以独立执行，线程结束后资源会被释放。
+      // http://en.cppreference.com/w/cpp/thread/thread/detach
       bgthreads_.pop_back();
       if (HasExcessiveThread()) {
         // There is still at least more excessive thread to terminate.
         WakeUpAllThreads();
+        //@NOTE 还有多余线程，则唤醒所有线程让最末一个多余线程自己主动走到ThreadDetach
       }
       PthreadCall("unlock", MutexUnlock(uniqueLock));
       break;
     }
 
+    //@NOTE 取一个任务并执行任务
     void (*function)(void*) = queue_.front().function;
     void* arg = queue_.front().arg;
     queue_.pop_front();
@@ -206,6 +219,7 @@ void ThreadPoolImpl::BGThread(size_t thread_id) {
 
 #ifdef OS_LINUX
     if (decrease_io_priority) {
+        //@NOTE 降低IO优先级
 #define IOPRIO_CLASS_SHIFT (13)
 #define IOPRIO_PRIO_VALUE(class, data) (((class) << IOPRIO_CLASS_SHIFT) | data)
       // Put schedule into IOPRIO_CLASS_IDLE class (lowest)
@@ -314,6 +328,7 @@ void ThreadPoolImpl::StartBGThreads() {
 
 void ThreadPoolImpl::Schedule(void (*function)(void* arg1), void* arg,
                               void* tag, void (*unschedFunction)(void* arg)) {
+//@NOTE 向线程池放入一个新任务
   Lock lock(mu_);
   PthreadCall("lock", ThreadPoolMutexLock(lock));
 
@@ -346,6 +361,8 @@ void ThreadPoolImpl::Schedule(void (*function)(void* arg1), void* arg,
 }
 
 int ThreadPoolImpl::UnSchedule(void* arg) {
+//@NOTE arg即tag
+//按tag将任务队列中的未执行任务删除
   int count = 0;
 
   Lock lock(mu_);

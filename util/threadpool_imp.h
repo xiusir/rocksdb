@@ -84,6 +84,7 @@ class ThreadPoolImpl : public ThreadPool {
     void* tag;
     void (*unschedFunction)(void*);
   };
+  //@NOTE Background item
 
   typedef std::deque<BGItem> BGQueue;
 
@@ -98,6 +99,9 @@ class ThreadPoolImpl : public ThreadPool {
   pthread_cond_t bgsignal_;
   std::vector<pthread_t> bgthreads_;
 #endif
+  //@NOTE std::thread C++11 新的线程对象。
+  //pthread即posix thread库。相对来说posix thread应用广泛、可靠性高。
+  //boost::thread功能与std::thread类似，但也是可靠性更高一点。
   BGQueue queue_;
   std::atomic_uint queue_len_;  // Queue length. Used for stats reporting
   bool exit_all_threads_;

@@ -151,6 +151,7 @@ private:
 __thread ThreadData* ThreadLocalPtr::StaticMeta::tls_ = nullptr;
 //@NOTE 每个线程会创建一个独立的ThreadData* 从而实现了每个线程访问自己的Instance()->tls_
 // https://gcc.gnu.org/onlinedocs/gcc-4.1.0/gcc/Thread_002dLocal.html
+// http://blog.csdn.net/liuxuejiang158blog/article/details/14100897
 #endif
 
 // Windows doesn't support a per-thread destructor with its
