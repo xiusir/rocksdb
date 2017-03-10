@@ -22,6 +22,8 @@ class Table;
 class TableBuilder;
 
 class AdaptiveTableFactory : public TableFactory {
+//@NOTE 自适应的Table Factory
+//按参数生成指定的TableReader,TableBuilder
  public:
   ~AdaptiveTableFactory() {}
 
@@ -38,6 +40,8 @@ class AdaptiveTableFactory : public TableFactory {
       unique_ptr<RandomAccessFileReader>&& file, uint64_t file_size,
       unique_ptr<TableReader>* table,
       bool prefetch_index_and_filter_in_cache = true) const override;
+  //@NOTE 根据文件末尾的Footer确定Table类型
+  // https://github.com/google/leveldb/blob/master/doc/table_format.md
 
   TableBuilder* NewTableBuilder(
       const TableBuilderOptions& table_builder_options,

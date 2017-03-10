@@ -45,6 +45,7 @@ Status AdaptiveTableFactory::NewTableReader(
     unique_ptr<RandomAccessFileReader>&& file, uint64_t file_size,
     unique_ptr<TableReader>* table,
     bool prefetch_index_and_filter_in_cache) const {
+//@NOTE 根据文件的footer确定生成哪一种TableFactory...太隐蔽了吧
   Footer footer;
   auto s = ReadFooterFromFile(file.get(), file_size, &footer);
   if (!s.ok()) {

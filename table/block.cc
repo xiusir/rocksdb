@@ -33,6 +33,9 @@ namespace rocksdb {
 //
 // If any errors are detected, returns nullptr.  Otherwise, returns a
 // pointer to the key delta (just past the three decoded values).
+//@NOTE block entry格式
+// | 1-5 byte                | 1-5 byte              | 1-5 byte     |
+// | num of shared key bytes | num of non-shared ... | len of value |
 static inline const char* DecodeEntry(const char* p, const char* limit,
                                       uint32_t* shared,
                                       uint32_t* non_shared,
@@ -43,6 +46,8 @@ static inline const char* DecodeEntry(const char* p, const char* limit,
   *value_length = reinterpret_cast<const unsigned char*>(p)[2];
   if ((*shared | *non_shared | *value_length) < 128) {
     // Fast path: all three values are encoded in one byte each
+    //@NOTE 假定3个数字都非常小，都是1个字节搞定的不定长数字，节省性能。。
+    //如果有的数字不是单字节编码，老老实实地变长数字解码GetVarint32Ptr...
     p += 3;
   } else {
     if ((p = GetVarint32Ptr(p, limit, shared)) == nullptr) return nullptr;
@@ -51,6 +56,7 @@ static inline const char* DecodeEntry(const char* p, const char* limit,
   }
 
   if (static_cast<uint32_t>(limit - p) < (*non_shared + *value_length)) {
+    //@NOTE 数据完整性检查，剩余空间根本保存不了指定长度数据，说明有错...
     return nullptr;
   }
   return p;
@@ -106,6 +112,7 @@ void BlockIter::Prev() {
       current_ = restarts_;
       restart_index_ = num_restarts_;
       return;
+      //@NOTE current_之前没有restart_point
     }
     restart_index_--;
   }
@@ -114,6 +121,7 @@ void BlockIter::Prev() {
 
   do {
     if (!ParseNextKey()) {
+      //@NOTE 后面没有有效key
       break;
     }
     Slice current_key = key();
@@ -122,6 +130,7 @@ void BlockIter::Prev() {
       // The key is not delta encoded
       prev_entries_.emplace_back(current_, current_key.data(), 0,
                                  current_key.size(), value());
+      //@NOTE key是从当前数据块完整获取
     } else {
       // The key is delta encoded, cache decoded key in buffer
       size_t new_key_offset = prev_entries_keys_buff_.size();
@@ -129,6 +138,7 @@ void BlockIter::Prev() {
 
       prev_entries_.emplace_back(current_, nullptr, new_key_offset,
                                  current_key.size(), value());
+      //@NOTE key是从当前数据块读取后缀
     }
     // Loop until end of current entry hits the start of original entry
   } while (NextEntryOffset() < original);
@@ -159,6 +169,7 @@ void BlockIter::Seek(const Slice& target) {
       return;
     }
   }
+  //@NOTE 向后循环直到找到第一个大于等于target的key
 }
 
 void BlockIter::SeekForPrev(const Slice& target) {
@@ -239,6 +250,7 @@ bool BlockIter::ParseNextKey() {
     } else {
       // This key share `shared` bytes with prev key, we need to decode it
       key_.TrimAppend(shared, p, non_shared);
+      //@NOTE 保留key_的前shared字节，追加[p, p+non_shared]
       key_pinned_ = false;
     }
 
@@ -275,12 +287,20 @@ bool BlockIter::ParseNextKey() {
 // is either the last restart point with a key less than target,
 // which means the key of next restart point is larger than target, or
 // the first restart point with a key = target
+//@NOTE 寻找第一个key大于等于target的restart point
+//如果target小于所有restart point的key，返回left
+//如果target大于所有restart point的key，返回right
+//所以返回的restart point的key可能小于target，也可能大于target
+//这一点和PrefixSeek差别很大。
+//
+//@TODO 可以查一查BlockPrefixIndex的创建方法，能否理解？
 bool BlockIter::BinarySeek(const Slice& target, uint32_t left, uint32_t right,
                            uint32_t* index) {
   assert(left <= right);
 
   while (left < right) {
     uint32_t mid = (left + right + 1) / 2;
+    //@NOTE 好奇怪为什么两处二分查找风格不一致？
     uint32_t region_offset = GetRestartPoint(mid);
     uint32_t shared, non_shared, value_length;
     const char* key_ptr = DecodeEntry(data_ + region_offset, data_ + restarts_,
@@ -301,11 +321,22 @@ bool BlockIter::BinarySeek(const Slice& target, uint32_t left, uint32_t right,
       right = mid - 1;
     } else {
       left = right = mid;
+      //@NOTE 假定restart point不会对应相同的key？
+      //否则无法确保这是第一个等于。
     }
+    //@NOTE 这种收敛方式会找到从右向左看第一个首key小于target的restart point、
+    //或任意一个首key等于target的restart point
   }
 
   *index = left;
   return true;
+  //@NOTE 为啥没有对key[restart_array_[left]-1]与target比较?
+  //BinarySeek和PrefixSeek实现效果不一致。
+  //BinarySeek：返回第一个首key大于等于target的restart point
+  //PrefixSeek: 返回的Offset必须是整个区域中第一个首key大于等于target的block_id，
+  //要求返回位置左侧数据块中所有key不大于target
+  //
+  //PrefixSeek条件严格常返回false，而BinarySeek常返回true。
 }
 
 // Compare target key and the block key of the block of `block_index`.
@@ -328,6 +359,7 @@ int BlockIter::CompareBlockKey(uint32_t block_index, const Slice& target) {
 bool BlockIter::BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
                                      uint32_t left, uint32_t right,
                                      uint32_t* index) {
+//@NOTE block_ids 是若干个restart point在restart_array_的下标
   assert(left <= right);
   uint32_t left_bound = left;
 
@@ -338,6 +370,8 @@ bool BlockIter::BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
     if (!status_.ok()) {
       return false;
     }
+    //@NOTE CompareBlockKey 会修改status_的值吗？
+    //直接放在函数头部就行了？
     if (cmp < 0) {
       // Key at "target" is larger than "mid". Therefore all
       // blocks before or at "mid" are uninteresting.
@@ -350,6 +384,7 @@ bool BlockIter::BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
       right = mid;
     }
   }
+  //@NOTE 收敛到从左向右看第一个key大于等于target的block_id
 
   if (left == right) {
     // In one of the two following cases:
@@ -358,9 +393,27 @@ bool BlockIter::BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
     // we can further distinguish the case of key in the block or key not
     // existing, by comparing the target key and the key of the previous
     // block to the left of the block found.
+    //@NOTE 两种情况
+    //1) 传入的left对应的key就大于等于target，left = left_bound is True
+    //2) left,right收敛到了从左向右看第一个大于等于target的位置。
+    //
+    //函数的目的是找到一个block_ids中的restart point，
+    //该位置的key大于等于target，其左侧紧邻的key小于等于target
+    //即在[left,right]范围内找到整个内存区域中第一个key大于等于target
+    //的block_id，若预期结果不在[left,right]内则置为无效。
     if (block_ids[left] > 0 &&
         (left == left_bound || block_ids[left - 1] != block_ids[left] - 1) &&
         CompareBlockKey(block_ids[left] - 1, target) > 0) {
+      //@NOTE x表示block_ids
+      // left == left_bound || left > left_bound && x[left-1] != x[left]-1 
+      // || left > left_bound && x[left-1] == x[left]-1
+      //
+      //当left>left_bound时，下面这种条件不可能为真
+      //  x[left-1] == x[left]-1且key[x[left-1]] > target
+      //因为二分查找保证了left左侧直到left_bound不可能出现key大于target的block_id，
+      //
+      //所以条件可以简化为
+      //  x[left]>0 && CompareBlockKey(x[left] - 1, target) > 0) {
       current_ = restarts_;
       return false;
     }
@@ -368,6 +421,7 @@ bool BlockIter::BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
     *index = block_ids[left];
     return true;
   } else {
+    //@NOTE 传入的right对应的key 就小于target....
     assert(left > right);
     // Mark iterator invalid
     current_ = restarts_;
@@ -376,6 +430,8 @@ bool BlockIter::BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
 }
 
 bool BlockIter::PrefixSeek(const Slice& target, uint32_t* index) {
+  //@NOTE 如果target的前缀没有出现在数据中，那么PrefixSeek会失效...
+  //或者预期结果没有正好落在restart point上时，也会悲剧...
   assert(prefix_index_);
   uint32_t* block_ids = nullptr;
   uint32_t num_blocks = prefix_index_->GetBlocks(target, &block_ids);
@@ -390,6 +446,7 @@ bool BlockIter::PrefixSeek(const Slice& target, uint32_t* index) {
 
 uint32_t Block::NumRestarts() const {
   assert(size_ >= 2*sizeof(uint32_t));
+  //@NOTE 从block末尾去4字节作为 num_restarts
   return DecodeFixed32(data_ + size_ - sizeof(uint32_t));
 }
 

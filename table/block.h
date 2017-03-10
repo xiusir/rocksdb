@@ -41,6 +41,8 @@ class BlockPrefixIndex;
 // a bitmap with ratio bytes_per_bit. Whenever we access a range of bytes in
 // the Block we update the bitmap and increment READ_AMP_ESTIMATE_USEFUL_BYTES.
 class BlockReadAmpBitmap {
+//@NOTE 读取block数据时用bitmap表示该位置是否已访问，
+//连续的n个字节作为一个数据单元，用1bit表示该单元是否已经被访问
  public:
   explicit BlockReadAmpBitmap(size_t block_size, size_t bytes_per_bit,
                               Statistics* statistics)
@@ -74,6 +76,8 @@ class BlockReadAmpBitmap {
   ~BlockReadAmpBitmap() { delete[] bitmap_; }
 
   void Mark(uint32_t start_offset, uint32_t end_offset) {
+    //@NOTE data_[start_offset,end_offset]表示一条数据，
+    //读取value同时会Mark这条数据的区域，
     assert(end_offset >= start_offset);
 
     // Every new bit we set will bump this counter
@@ -91,6 +95,7 @@ class BlockReadAmpBitmap {
     // range is set or not.
     if (mid_bit < end_bit) {
       if (GetAndSet(mid_bit) == 0) {
+        //@NOTE mid_bit被首次标记
         new_useful_bytes += (end_bit - mid_bit) << bytes_per_bit_pow_;
       } else {
         // If the middle bit is set, it's guaranteed that start and end bits
@@ -168,7 +173,9 @@ class Block {
 #endif  // ROCKSDB_MALLOC_USABLE_SIZE
     return size_;
   }
+
   uint32_t NumRestarts() const;
+  //@NOTE 文件末尾的4个字节
   CompressionType compression_type() const {
     return contents_.compression_type;
   }
@@ -202,8 +209,11 @@ class Block {
   const char* data_;            // contents_.data.data()
   size_t size_;                 // contents_.data.size()
   uint32_t restart_offset_;     // Offset in data_ of restart array
+  //@NOTE 什么是 restart point 是数据块中完整的key。
   std::unique_ptr<BlockPrefixIndex> prefix_index_;
+  //@NOTE 前缀索引：顺序保存restart point下标。
   std::unique_ptr<BlockReadAmpBitmap> read_amp_bitmap_;
+  //@NOTE 用于block读取速度的性能统计(近似统计)。
   // All keys in the block will have seqno = global_seqno_, regardless of
   // the encoded value (kDisableGlobalSequenceNumber means disabled)
   const SequenceNumber global_seqno_;
@@ -211,9 +221,15 @@ class Block {
   // No copying allowed
   Block(const Block&);
   void operator=(const Block&);
+  //@NOTE 加上 = delete;
 };
 
 class BlockIter : public InternalIterator {
+//@NOTE BlockIter使用样例
+//auto iter = static_cast<BlockIter*>(reader.NewIterator(...));
+//for (iter->SeekToFirst() ; iter->Valid() ; iter->Next()) {
+//    iter->value();
+//}
  public:
   BlockIter()
       : comparator_(nullptr),
@@ -261,12 +277,14 @@ class BlockIter : public InternalIterator {
   }
 
   virtual bool Valid() const override { return current_ < restarts_; }
+  //@NOTE 初始化后是invalid状态...
   virtual Status status() const override { return status_; }
   virtual Slice key() const override {
     assert(Valid());
     return key_.GetKey();
   }
   virtual Slice value() const override {
+  //@NOTE 为什么首字母没有大写...?
     assert(Valid());
     if (read_amp_bitmap_ && current_ < restarts_ &&
         current_ != last_bitmap_offset_) {
@@ -278,16 +296,35 @@ class BlockIter : public InternalIterator {
   }
 
   virtual void Next() override;
+  //@NOTE 执行效果同ParseNextKey
 
   virtual void Prev() override;
+  //@NOTE 执行效果
+  //根据前面prev_entries_缓存：
+  //a) prev_entries_idx_ --
+  //b) key_,value_ 设置到前一个数据块对应位置，key_pinned_更新
+  //c) current_ 指向前一个有效数据块
+  //
+  //根据restart point前跳，向后找紧邻current_的前一个位置：
+  //a) prev_entries_* 恢复默认值
+  //b) restart_index_ 回退，遇到第一个小于current_的restart_point结束；
+  //   或没有遇到restart_point，将current_,restart_index_设置为无效。
+  //c) SeekToRestartPoint(restart_index_) : value_指向 data_[cur_restart_point_]
+  //   cur_restart_point = restart_array_[restart_index_]
+  //d) prev_entries_index_ 指向前一个有效内存块在prev_entries_的下标
+  //e) current_,value_指向前一个可读取位置
 
   virtual void Seek(const Slice& target) override;
+  //@NOTE 定位到第一个大于等于target的位置
 
   virtual void SeekForPrev(const Slice& target) override;
+  //@NOTE 定位到从右向左看第一个key小于target的位置
 
   virtual void SeekToFirst() override;
+  //@NOTE 定位到第一个restart point的位置
 
   virtual void SeekToLast() override;
+  //@NOTE current_,key_,value_ 定位到最后一条数据
 
 #ifndef NDEBUG
   ~BlockIter() {
@@ -317,6 +354,8 @@ class BlockIter : public InternalIterator {
   const char* data_;       // underlying block contents
   uint32_t restarts_;      // Offset of restart array (list of fixed32)
   uint32_t num_restarts_;  // Number of uint32_t entries in restart array
+  //@NOTE restart point 是整个数据块中的特殊点，restart point的key都是完整key，
+  //其后的若干个key会利用有序的特点进行前缀压缩节省空间。
 
   // current_ is offset in data_ of current entry.  >= restarts_ if !Valid
   uint32_t current_;
@@ -356,6 +395,11 @@ class BlockIter : public InternalIterator {
   std::string prev_entries_keys_buff_;
   std::vector<CachedPrevEntry> prev_entries_;
   int32_t prev_entries_idx_ = -1;
+  //@NOTE 描述三个变量
+  //prev_entries_ 保存key在data_的位置，或在p*e*_keys_buff_的位置(针对前缀压缩key)
+  //prev_entries_keys_buff_ 作为Prev过程中遇到的前缀压缩key的临时存储
+  //prev_entries_idx_ 保存当前位置前一个有效的内存块的prev_entries_下标
+  //CachedPrevEntry 用于保存key,value位置
 
   inline int Compare(const Slice& a, const Slice& b) const {
     return comparator_->Compare(a, b);
@@ -371,6 +415,9 @@ class BlockIter : public InternalIterator {
     assert(index < num_restarts_);
     return DecodeFixed32(data_ + restarts_ + index * sizeof(uint32_t));
   }
+  //@NOTE 为什么搞的这么复杂？用个数组指针就搞定了。。。
+  //const uint32_t* restart_array_ = reinterpret_cast<const uint32_t*>(date_+restarts_);
+  //size_t restart_array_len_ = num_restarts_;
 
   void SeekToRestartPoint(uint32_t index) {
     key_.Clear();
@@ -381,21 +428,37 @@ class BlockIter : public InternalIterator {
     uint32_t offset = GetRestartPoint(index);
     value_ = Slice(data_ + offset, 0);
   }
+  //@NOTE restart_index_回退到index
+  //value_指向 data_[restart_array_[index]]
 
   void CorruptionError();
 
   bool ParseNextKey();
+  //@NOTE 执行效果：
+  //常规：
+  //a) current_ 指向可读取的数据块起始位置，或 无效值
+  //b) restart_index_ 指向小于current_的restart point序号
+  //c) key_ 保存即将读取的数据块的key
+  //d) key_pinned_ 表示当前key是完整加载、还是共享前缀
+  //e) value_ 跳过key区域，指向实际value数据块
+  //非常规：
+  //a) current_ = 无效值
+  //b) restart_index_ = 无效值
 
   bool BinarySeek(const Slice& target, uint32_t left, uint32_t right,
                   uint32_t* index);
+  //@NOTE 对restart_array_进行二分查找，返回下标
 
   int CompareBlockKey(uint32_t block_index, const Slice& target);
+  //@NOTE block_index 实际是restart_index_ 表示restart_point的下标。
 
   bool BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
                             uint32_t left, uint32_t right,
                             uint32_t* index);
+  //@NOTE PrefixSeek依赖的索引数组二分查找函数
 
   bool PrefixSeek(const Slice& target, uint32_t* index);
+  //@NOTE 按前缀索引进行二分查找，返回第一个大于等于target的索引下标
 
 };
 

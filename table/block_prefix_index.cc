@@ -102,6 +102,8 @@ class BlockPrefixIndex::Builder {
         assert(current->start_block >= prev->end_block);
         auto distance = current->start_block - prev->end_block;
         if (distance <= 1) {
+          //@NOTE 两个相邻的Prefix被hash到同一个bucket，表示后者一定是以前者为前缀？
+          //这样不合适吧？
           prev->end_block = current->end_block;
           prev->num_blocks = prev->end_block - prev->start_block + 1;
           num_blocks_per_bucket[bucket] += (current->num_blocks + distance - 1);
@@ -150,6 +152,9 @@ class BlockPrefixIndex::Builder {
           }
           current = current->next;
         }
+        //@NOTE block_array_buffer 
+        //将非单restart point的bucket涵盖的所有blockid保存在block_array_buffer
+        //是不是没必要逐个保存？
         assert(last_block == &block_array_buffer[offset]);
         offset += (num_blocks + 1);
       }
@@ -214,6 +219,7 @@ Status BlockPrefixIndex::Create(const SliceTransform* internal_prefix_extractor,
 uint32_t BlockPrefixIndex::GetBlocks(const Slice& key,
                                      uint32_t** blocks) {
   Slice prefix = internal_prefix_extractor_->Transform(key);
+  //@NOTE 先做个前缀截断
 
   uint32_t bucket = PrefixToBucket(prefix, num_buckets_);
   uint32_t block_id = buckets_[bucket];

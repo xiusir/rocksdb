@@ -16,6 +16,7 @@ class SliceTransform;
 
 // Build a hash-based index to speed up the lookup for "index block".
 // BlockHashIndex accepts a key and, if found, returns its restart index within
+//@NOTE ?? HashIndex?
 // that index block.
 class BlockPrefixIndex {
  public:
@@ -37,6 +38,12 @@ class BlockPrefixIndex {
   static Status Create(const SliceTransform* hash_key_extractor,
                        const Slice& prefixes, const Slice& prefix_meta,
                        BlockPrefixIndex** prefix_index);
+  //@NOTE 数据格式说明
+  //prefix_meta
+  //|prefix_size[0]|entry_index[0]|num_blocks[0]|prefix_size[1]|entry_index[1]|...
+  //entry_index即restart_point_index
+  //prefixes
+  //|prefix1|prefix2|...
 
   ~BlockPrefixIndex() {
     delete[] buckets_;
