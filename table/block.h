@@ -186,6 +186,7 @@ class Block {
   // NOTE: for the hash based lookup, if a key prefix doesn't match any key,
   // the iterator will simply be set as "invalid", rather than returning
   // the key that is just pass the target key.
+  //@NOTE 为什么？
   //
   // If iter is null, return new Iterator
   // If iter is not null, update this one and return it as Iterator*

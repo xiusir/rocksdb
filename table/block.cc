@@ -368,6 +368,7 @@ bool BlockIter::BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
                                      uint32_t left, uint32_t right,
                                      uint32_t* index) {
 //@NOTE block_ids 是若干个restart point在restart_array_的下标
+
   assert(left <= right);
   uint32_t left_bound = left;
 
@@ -445,6 +446,10 @@ bool BlockIter::PrefixSeek(const Slice& target, uint32_t* index) {
   uint32_t num_blocks = prefix_index_->GetBlocks(target, &block_ids);
 
   if (num_blocks == 0) {
+  //@NOTE Block::NewIterator的注释，是说的这里吗？
+  // NOTE: for the hash based lookup, if a key prefix doesn't match any key,
+  // the iterator will simply be set as "invalid", rather than returning
+  // the key that is just pass the target key.
     current_ = restarts_;
     return false;
   } else  {
