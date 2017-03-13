@@ -154,6 +154,9 @@ void BlockIter::Seek(const Slice& target) {
   bool ok = false;
   if (prefix_index_) {
     ok = PrefixSeek(target, &index);
+    //@NOTE 从后面代码看，Seek目的是找到第一个大于或等于target的位置，
+    //所以要求PrefixSeek必须返回一个key小于或等于target的restart point
+    //或包含第一个大于等于target的key的restart point
   } else {
     ok = BinarySeek(target, 0, num_restarts_ - 1, &index);
   }
@@ -170,6 +173,9 @@ void BlockIter::Seek(const Slice& target) {
     }
   }
   //@NOTE 向后循环直到找到第一个大于等于target的key
+  //这个while写的也很蛋疼。。。
+  //while (ParseNextKey() && Compare(key_.GetKey(), target) < 0) {
+  //}
 }
 
 void BlockIter::SeekForPrev(const Slice& target) {
@@ -189,12 +195,14 @@ void BlockIter::SeekForPrev(const Slice& target) {
 
   while (ParseNextKey() && Compare(key_.GetKey(), target) < 0) {
   }
+  //@NOTE kv存储不会有两条完全相同的key保存在同一个block中?
   if (!Valid()) {
     SeekToLast();
   } else {
     while (Valid() && Compare(key_.GetKey(), target) > 0) {
       Prev();
     }
+    //@NOTE 这段处理得很不自然，一直想后找，然后在往回退...
   }
 }
 

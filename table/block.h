@@ -315,10 +315,12 @@ class BlockIter : public InternalIterator {
   //e) current_,value_指向前一个可读取位置
 
   virtual void Seek(const Slice& target) override;
-  //@NOTE 定位到第一个大于等于target的位置
+  //@NOTE 定位到第一个大于或等于target的key, 即lower_bound
+  //@see internal_iterator.h InternalIterator::Seek
 
   virtual void SeekForPrev(const Slice& target) override;
-  //@NOTE 定位到从右向左看第一个key小于target的位置
+  //@NOTE (从右向左看)定位到第一个小于或等于target的位置，upper_bound
+  //@see internal_iterator.h InternalIterator::SeekForPrev
 
   virtual void SeekToFirst() override;
   //@NOTE 定位到第一个restart point的位置
