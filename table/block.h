@@ -210,7 +210,10 @@ class Block {
   const char* data_;            // contents_.data.data()
   size_t size_;                 // contents_.data.size()
   uint32_t restart_offset_;     // Offset in data_ of restart array
-  //@NOTE 什么是 restart point 是数据块中完整的key。
+  //@NOTE 什么是 restart point
+  //@see block_builder.h
+  //构造BlockContent时，将整块数据按固定间隔分成若个Block，
+  //每个Block起始偏移量是一个restart point，存到BlockContent末尾。
   std::unique_ptr<BlockPrefixIndex> prefix_index_;
   //@NOTE 前缀索引：顺序保存restart point下标。
   std::unique_ptr<BlockReadAmpBitmap> read_amp_bitmap_;

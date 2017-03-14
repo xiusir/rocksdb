@@ -30,6 +30,8 @@ struct TableProperties;
 class InternalIterator;
 
 class MetaIndexBuilder {
+//@NOTE MetaIndexBlock的每条数据对应一个meta数据块的位置，
+// PropertyBlock就是其中一种meta数据块
  public:
   MetaIndexBuilder(const MetaIndexBuilder&) = delete;
   MetaIndexBuilder& operator=(const MetaIndexBuilder&) = delete;

@@ -92,6 +92,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   assert(counter_ <= block_restart_interval_);
   size_t shared = 0;  // number of bytes shared with prev key
   if (counter_ >= block_restart_interval_) {
+    //@NOTE 其实就是==
     // Restart compression
     restarts_.push_back(static_cast<uint32_t>(buffer_.size()));
     estimate_ += sizeof(uint32_t);
@@ -100,6 +101,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
     if (use_delta_encoding_) {
       // Update state
       last_key_.assign(key.data(), key.size());
+      //@NOTE shared = 0;
     }
   } else if (use_delta_encoding_) {
     Slice last_key_piece(last_key_);

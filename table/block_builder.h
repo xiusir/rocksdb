@@ -57,6 +57,7 @@ class BlockBuilder {
   int                   counter_;   // Number of entries emitted since restart
   bool                  finished_;  // Has Finish() been called?
   std::string           last_key_;
+  //@NOTE last_key_ 保存最新处理过的key
 };
 
 }  // namespace rocksdb

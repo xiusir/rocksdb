@@ -34,6 +34,8 @@ class FilterBitsReader;
 // num_probes: how many hash functions are used in bloom filter
 //
 class FullFilterBlockBuilder : public FilterBlockBuilder {
+//@NOTE see FilterBitsBuilder
+//将filter build成Slice，便于存入Table文件中
  public:
   explicit FullFilterBlockBuilder(const SliceTransform* prefix_extractor,
                                   bool whole_key_filtering,
@@ -69,6 +71,8 @@ class FullFilterBlockBuilder : public FilterBlockBuilder {
 // A FilterBlockReader is used to parse filter from SST table.
 // KeyMayMatch and PrefixMayMatch would trigger filter checking
 class FullFilterBlockReader : public FilterBlockReader {
+//@NOTE see FilterBitsReader
+//从BlockContents中提取filter，并提供接口判断key是否匹配。
  public:
   // REQUIRES: "contents" and filter_bits_reader must stay live
   // while *this is live.

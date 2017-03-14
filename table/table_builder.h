@@ -85,6 +85,7 @@ struct TableBuilderOptions {
 // non-const method, all threads accessing the same TableBuilder must use
 // external synchronization.
 class TableBuilder {
+//@NOTE 这个接口很奇怪，结果数据怎么返回给调用者？
  public:
   // REQUIRES: Either Finish() or Abandon() has been called.
   virtual ~TableBuilder() {}
