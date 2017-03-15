@@ -119,6 +119,7 @@ inline Slice ExtractUserKey(const Slice& internal_key) {
 }
 
 inline ValueType ExtractValueType(const Slice& internal_key) {
+//@NOTE 倒数第8个字节保存Value类型
   assert(internal_key.size() >= 8);
   const size_t n = internal_key.size();
   uint64_t num = DecodeFixed64(internal_key.data() + n - 8);

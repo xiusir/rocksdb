@@ -29,21 +29,26 @@ BlockBasedTableFactory::BlockBasedTableFactory(
   if (table_options_.flush_block_policy_factory == nullptr) {
     table_options_.flush_block_policy_factory.reset(
         new FlushBlockBySizePolicyFactory());
+    //@NOTE 默认按累积的KeyValue的Size Flush出一个Block
   }
   if (table_options_.no_block_cache) {
     table_options_.block_cache.reset();
   } else if (table_options_.block_cache == nullptr) {
     table_options_.block_cache = NewLRUCache(8 << 20);
+    //@NOTE 默认LRUCache
   }
   if (table_options_.block_size_deviation < 0 ||
       table_options_.block_size_deviation > 100) {
     table_options_.block_size_deviation = 0;
+    //@NOTE block size的偏差 ？
   }
   if (table_options_.block_restart_interval < 1) {
     table_options_.block_restart_interval = 1;
+    //@NOTE 数据区restart point间隔至少是1条数据
   }
   if (table_options_.index_block_restart_interval < 1) {
     table_options_.index_block_restart_interval = 1;
+    //@NOTE 索引区restart point间隔至少是1条数据
   }
 }
 
@@ -78,6 +83,7 @@ TableBuilder* BlockBasedTableFactory::NewTableBuilder(
 Status BlockBasedTableFactory::SanitizeOptions(
     const DBOptions& db_opts,
     const ColumnFamilyOptions& cf_opts) const {
+//@NOTE 配置项检查
   if (table_options_.index_type == BlockBasedTableOptions::kHashSearch &&
       cf_opts.prefix_extractor == nullptr) {
     return Status::InvalidArgument("Hash index is specified for block-based "

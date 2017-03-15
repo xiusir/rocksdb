@@ -99,6 +99,7 @@ class BlockBasedTableBuilder : public TableBuilder {
                             const CompressionType type,
                             const BlockHandle* handle);
   struct Rep;
+  //@NOTE 用于保存配置项、过程变量等...
   class BlockBasedTablePropertiesCollectorFactory;
   class BlockBasedTablePropertiesCollector;
   Rep* rep_;

@@ -22,16 +22,19 @@ namespace rocksdb {
 struct EnvOptions;
 
 using std::unique_ptr;
+//@NOTE 仅引用必要的类型
 class BlockBasedTableBuilder;
 
 class BlockBasedTableFactory : public TableFactory {
  public:
   explicit BlockBasedTableFactory(
       const BlockBasedTableOptions& table_options = BlockBasedTableOptions());
+  //@NOTE 声明时指定默认值，定义时(实现时)不需要
 
   ~BlockBasedTableFactory() {}
 
   const char* Name() const override { return "BlockBasedTable"; }
+  //@NOTE 类名
 
   Status NewTableReader(
       const TableReaderOptions& table_reader_options,

@@ -73,6 +73,8 @@ class IndexBuilder {
   struct IndexBlocks {
     Slice index_block_contents;
     std::unordered_map<std::string, Slice> meta_blocks;
+    //@NOTE 如HashIndexBuilder，构建PrefixHashIndex
+    //将prefix字符串拼接成一个Slice，将每个有效prefix的位置拼成另一个Slice。
   };
   explicit IndexBuilder(const InternalKeyComparator* comparator)
       : comparator_(comparator) {}
@@ -120,6 +122,8 @@ class IndexBuilder {
 //     last key in the data block as the index key, we instead find a shortest
 //     substitute key that serves the same function.
 class ShortenedIndexBuilder : public IndexBuilder {
+//@NOTE index block 实际也是用普通的BlockBuilder序列化
+//ShortenedIndexBuilder 构建的索引用于二分查找
  public:
   explicit ShortenedIndexBuilder(const InternalKeyComparator* comparator,
                                  int index_block_restart_interval)
@@ -132,8 +136,10 @@ class ShortenedIndexBuilder : public IndexBuilder {
     if (first_key_in_next_block != nullptr) {
       comparator_->FindShortestSeparator(last_key_in_current_block,
                                          *first_key_in_next_block);
+      //@NOTE ??
     } else {
       comparator_->FindShortSuccessor(last_key_in_current_block);
+      //@NOTE ??
     }
 
     std::string handle_encoding;
@@ -179,6 +185,8 @@ class ShortenedIndexBuilder : public IndexBuilder {
 // reuse the first metablock during hash index construction without unnecessary
 // data copy or small heap allocations for prefixes.
 class HashIndexBuilder : public IndexBuilder {
+//@NOTE 可以用于前缀Hash定位然后二分查找
+//包含ShortenedIndexBuilder的索引形态
  public:
   explicit HashIndexBuilder(const InternalKeyComparator* comparator,
                             const SliceTransform* hash_key_extractor,
@@ -196,6 +204,7 @@ class HashIndexBuilder : public IndexBuilder {
   }
 
   virtual void OnKeyAdded(const Slice& key) override {
+    //@NOTE 若新进key的prefix与当前已处理的prefix不同，则将当前prefix输出，更换为新prefix
     auto key_prefix = hash_key_extractor_->Transform(key);
     bool is_first_entry = pending_block_num_ == 0;
 
@@ -217,6 +226,9 @@ class HashIndexBuilder : public IndexBuilder {
       auto last_restart_index = pending_entry_index_ + pending_block_num_ - 1;
       assert(last_restart_index <= current_restart_index_);
       if (last_restart_index != current_restart_index_) {
+          //@NOTE 感觉这个条件应该是一直为真?
+          //assert(last_restart_index < current_restart_index_);
+          //即last_restart_index 永远小于current_restart_index_
         ++pending_block_num_;
       }
     }
@@ -229,6 +241,7 @@ class HashIndexBuilder : public IndexBuilder {
         {kHashIndexPrefixesBlock.c_str(), prefix_block_});
     index_blocks->meta_blocks.insert(
         {kHashIndexPrefixesMetadataBlock.c_str(), prefix_meta_block_});
+    //@NOTE prefix信息存入meta_blocks
     return Status::OK();
   }
 
@@ -239,6 +252,7 @@ class HashIndexBuilder : public IndexBuilder {
 
  private:
   void FlushPendingPrefix() {
+    //@NOTE 输出当前Prefix
     prefix_block_.append(pending_entry_prefix_.data(),
                          pending_entry_prefix_.size());
     PutVarint32Varint32Varint32(
@@ -267,6 +281,7 @@ class HashIndexBuilder : public IndexBuilder {
 
 // Without anonymous namespace here, we fail the warning -Wmissing-prototypes
 namespace {
+//@NOTE 匿名空间避免 -Wmissing-prototypes ？
 
 // Create a index builder based on its type.
 IndexBuilder* CreateIndexBuilder(IndexType type,
@@ -277,10 +292,12 @@ IndexBuilder* CreateIndexBuilder(IndexType type,
     case BlockBasedTableOptions::kBinarySearch: {
       return new ShortenedIndexBuilder(comparator,
                                        index_block_restart_interval);
+      //@NOTE 适用于二分查找的索引
     }
     case BlockBasedTableOptions::kHashSearch: {
       return new HashIndexBuilder(comparator, prefix_extractor,
                                   index_block_restart_interval);
+      //@NOTE 适用于前缀哈希+二分查找的索引
     }
     default: {
       assert(!"Do not recognize the index type ");
@@ -321,6 +338,7 @@ Slice CompressBlock(const Slice& raw,
                     CompressionType* type, uint32_t format_version,
                     const Slice& compression_dict,
                     std::string* compressed_output) {
+//@NOTE block压缩
   if (*type == kNoCompression) {
     return raw;
   }
@@ -564,11 +582,14 @@ BlockBasedTableBuilder::BlockBasedTableBuilder(
   if (rep_->filter_block != nullptr) {
     rep_->filter_block->StartBlock(0);
   }
+  //@NOTE 根据_ioptions, table_options创建的FilterBlockBuilder
+
   if (table_options.block_cache_compressed.get() != nullptr) {
     BlockBasedTable::GenerateCachePrefix(
         table_options.block_cache_compressed.get(), file->writable_file(),
         &rep_->compressed_cache_key_prefix[0],
         &rep_->compressed_cache_key_prefix_size);
+    //@NOTE 压缩的block缓存
   }
 }
 
@@ -582,6 +603,7 @@ void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
   assert(!r->closed);
   if (!ok()) return;
   ValueType value_type = ExtractValueType(key);
+  //@NOTE key的倒数第8个字节保存Value类型
   if (IsValueType(value_type)) {
     if (r->props.num_entries > 0) {
       assert(r->internal_comparator.Compare(key, Slice(r->last_key)) > 0);
@@ -600,17 +622,24 @@ void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
       // "the r" as the key for the index block entry since it is >= all
       // entries in the first block and < all entries in subsequent
       // blocks.
+      //@NOTE 这里讲了为什么构建索引时要同时传入当前block的末尾key和下一个
+      //block的首key，大概意思是设置索引key时可以自主地选择一个较短的字符串
+      //小于next key同时大于等于last key，使得索引更小
       if (ok()) {
         r->index_builder->AddIndexEntry(&r->last_key, &key, r->pending_handle);
+        //@NOTE 生成一个block，添加一条索引项
       }
     }
 
     if (r->filter_block != nullptr) {
       r->filter_block->Add(ExtractUserKey(key));
+      //@NOTE 传入的key并不是真实的用户写入的key，末尾携带了8个byte的附加信息
+      //做filter_block时将附加信息排除掉
     }
 
     r->last_key.assign(key.data(), key.size());
     r->data_block.Add(key, value);
+    //@NOTE 数据块
     r->props.num_entries++;
     r->props.raw_key_size += key.size();
     r->props.raw_value_size += value.size();
@@ -640,12 +669,16 @@ void BlockBasedTableBuilder::Flush() {
   if (!ok()) return;
   if (r->data_block.empty()) return;
   WriteBlock(&r->data_block, &r->pending_handle, true /* is_data_block */);
+  //@NOTE 写数据区
   if (ok() && !r->table_options.skip_table_builder_flush) {
     r->status = r->file->Flush();
+    //@NOTE 文件Flush
   }
   if (r->filter_block != nullptr) {
     r->filter_block->StartBlock(r->offset);
+    //@NOTE 写Filter区
   }
+  //@NOTE FilterBlock 到底是啥意思？
   r->props.data_size = r->offset;
   ++r->props.num_data_blocks;
 }
