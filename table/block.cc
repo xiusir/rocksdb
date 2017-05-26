@@ -301,14 +301,15 @@ bool BlockIter::ParseNextKey() {
 //所以返回的restart point的key可能小于target，也可能大于target
 //这一点和PrefixSeek差别很大。
 //
-//@TODO 可以查一查BlockPrefixIndex的创建方法，能否理解？
 bool BlockIter::BinarySeek(const Slice& target, uint32_t left, uint32_t right,
                            uint32_t* index) {
   assert(left <= right);
 
   while (left < right) {
     uint32_t mid = (left + right + 1) / 2;
-    //@NOTE 好奇怪为什么两处二分查找风格不一致？
+    //@NOTE 好奇怪为什么两处二分查找风格不一致
+    //因为BinarySeek 比较的是每个data block的first key
+    //而PrefixSeek 比较的是每个data block的索引key，实际是data block的last key
     uint32_t region_offset = GetRestartPoint(mid);
     uint32_t shared, non_shared, value_length;
     const char* key_ptr = DecodeEntry(data_ + region_offset, data_ + restarts_,
@@ -329,19 +330,18 @@ bool BlockIter::BinarySeek(const Slice& target, uint32_t left, uint32_t right,
       right = mid - 1;
     } else {
       left = right = mid;
-      //@NOTE 假定restart point不会对应相同的key？
+      //@NOTE 假定restart point不会对应相同的key
       //否则无法确保这是第一个等于。
     }
-    //@NOTE 这种收敛方式会找到从右向左看第一个首key小于target的restart point、
-    //或任意一个首key等于target的restart point
+    //@NOTE 这种收敛方式会找到从右向左看第一个key小于target的restart point、
+    //或任意一个key等于target的restart point
   }
 
   *index = left;
   return true;
-  //@NOTE 为啥没有对key[restart_array_[left]-1]与target比较?
-  //BinarySeek和PrefixSeek实现效果不一致。
-  //BinarySeek：返回第一个首key大于等于target的restart point
-  //PrefixSeek: 返回的Offset必须是整个区域中第一个首key大于等于target的block_id，
+  //@NOTE 
+  //BinarySeek：返回从右向左看第一个首key小于等于target的restart point
+  //PrefixSeek: 返回从左向右看第一个index key大于等于target的block_id，
   //要求返回位置左侧数据块中所有key不大于target
   //
   //PrefixSeek条件严格常返回false，而BinarySeek常返回true。
@@ -379,8 +379,7 @@ bool BlockIter::BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
     if (!status_.ok()) {
       return false;
     }
-    //@NOTE CompareBlockKey 会修改status_的值吗？
-    //直接放在函数头部就行了？
+    //@NOTE CompareBlockKey 会修改status_的值...
     if (cmp < 0) {
       // Key at "target" is larger than "mid". Therefore all
       // blocks before or at "mid" are uninteresting.
@@ -439,8 +438,7 @@ bool BlockIter::BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
 }
 
 bool BlockIter::PrefixSeek(const Slice& target, uint32_t* index) {
-  //@NOTE 如果target的前缀没有出现在数据中，那么PrefixSeek会失效...
-  //或者预期结果没有正好落在restart point上时，也会悲剧...
+  //@NOTE 如果target的前缀没有出现在前缀索引中，那么PrefixSeek会失效...
   assert(prefix_index_);
   uint32_t* block_ids = nullptr;
   uint32_t num_blocks = prefix_index_->GetBlocks(target, &block_ids);

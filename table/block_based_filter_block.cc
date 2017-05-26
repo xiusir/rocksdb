@@ -22,6 +22,7 @@ namespace {
 
 void AppendItem(std::string* props, const std::string& key,
                 const std::string& value) {
+//@NOTE 按文本格式将key,value追加到字符串props，便于查看调试。
   char cspace = ' ';
   std::string value_str("");
   size_t i = 0;
@@ -59,6 +60,43 @@ void AppendItem(std::string* props, const TKey& key, const std::string& value) {
 // Generate new filter every 2KB of data
 static const size_t kFilterBaseLg = 11;
 static const size_t kFilterBase = 1 << kFilterBaseLg;
+//@NOTE BlockBasedTable是RocksDB默认的SST格式，文件分为相邻的5个区域。
+//BlockBasedTable=DataBlockArea|MetaBlockArea|MetaIndexBlock|DataIndexBlock|Footer
+//其中：
+//DataBlockArea=DataBlock1|DataBlock2|DataBlock3|...
+//MetaBlockArea=MetaBlock1(filter block)|MetaBlock2(stats/prop block)|MetaBlock3(compress dict)|...
+//MetaIndexBlock=<MetaName1,BlockHandle1>|<MetaName2,BlockHandle2>|...
+//DataIndexBlock=<DKey1,BlockHandle1>|<DKey2,BlockHandle2>|...
+//           DKey_i >= LastKeyInDataBlock_i and DKey_i < FirstKeyInDataBlock_i+1 and DKey_i < Dkey_i+1
+//Footer=MetaIndexBlockHandle|DataIndexBlockHandle|...magic number
+//
+//BlockHandle即指向文件某一区域的指针
+//
+//所以每个索引项的key都是当前数据块的最大key，而不是我以前想的取首key作为索引项的key...
+//当启用二级索引kTwoLevelIndexSearch时
+//DataIndexBlock=FirstLevelIndex|SecondLevelIndex
+//FirstLevelIndex=<IKey1,IndexBlockHandle1>|<IKey2,IndexBlockHandle2>|...
+//SecondLevelIndex=<DKey1,BlockHandle1>|<DKey2,BlockHandle2>|...
+//
+//DataBlock,MetaBlock格式化方法由block_builder.cc定义
+//
+//
+//FilterBlock=filter1|filter2|...|filterN|Offset1|Offset2|...|OffsetN|Offset of Offset1|lg(base)
+//
+//filter_i=the output of FilterPolicy::CreateFilter() on all keys Stored in a block 
+//         within offset [i*base, (i+1)*base), base=2KB
+//  即将文件按2KB分区，第i个2KB的数据区域包含的key经过CreateFilter后保存在filter_i
+//
+//PropertyBlock=<Name1,Value1>|<Name2,Value2>|...
+//这种meta block保存Table的属性、统计数据。
+//
+//CompressionDictBlock=...
+//这种meta block包含用于保存压缩/解压缩所用的词典。
+//这个压缩词典是根据历史数据随机抽样的数据构建。
+//更具体地说，当最底层数据compaction时才会构建压缩词典，因为最底层数据量最大而且成分稳定。
+//compaction过程会为每个文件生成不同的压缩词典，词典内容随着数据遍历而不断变化。
+//
+// https://github.com/facebook/rocksdb/wiki/Rocksdb-BlockBasedTable-Format
 
 BlockBasedFilterBlockBuilder::BlockBasedFilterBlockBuilder(
     const SliceTransform* prefix_extractor,
